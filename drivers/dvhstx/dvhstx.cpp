@@ -225,6 +225,28 @@ void __scratch_x("display") DVHSTX::text_dma_handler() {
             uint8_t* dst_ptr = (uint8_t*)&line_buffers[ch_num * line_buf_total_len + count_of(vactive_text_line_header)];
             uint8_t* src_ptr = &frame_buffer_display[(y / 24) * frame_width];
             uint8_t* colour_ptr = src_ptr + frame_width * frame_height;
+#ifdef __riscv
+            for (int i = 0; i < frame_width; ++i) {
+                const uint8_t c = (*src_ptr++ - 0x20);
+                uint32_t bits = (c < 95) ? font_cache[c * 24 + char_y] : 0;
+                const uint8_t colour = *colour_ptr++;
+
+                *dst_ptr++ = colour * ((bits >> 24) & 3);
+                *dst_ptr++ = colour * ((bits >> 22) & 3);
+                *dst_ptr++ = colour * ((bits >> 20) & 3);
+                *dst_ptr++ = colour * ((bits >> 18) & 3);
+                *dst_ptr++ = colour * ((bits >> 16) & 3);
+                *dst_ptr++ = colour * ((bits >> 14) & 3);
+                *dst_ptr++ = colour * ((bits >> 12) & 3);
+                *dst_ptr++ = colour * ((bits >> 10) & 3);
+                *dst_ptr++ = colour * ((bits >> 8) & 3);
+                *dst_ptr++ = colour * ((bits >> 6) & 3);
+                *dst_ptr++ = colour * ((bits >> 4) & 3);
+                *dst_ptr++ = colour * ((bits >> 2) & 3);
+                *dst_ptr++ = colour * (bits & 3);
+                *dst_ptr++ = 0;
+            }
+#else
             int i = 0;
             for (; i < frame_width-1; i += 2) {
                 uint8_t c = (*src_ptr++ - 0x20);
@@ -333,6 +355,7 @@ void __scratch_x("display") DVHSTX::text_dma_handler() {
                 *dst_ptr++ = colour * (bits & 3);
                 *dst_ptr++ = 0;
             }
+#endif
         }
     }
 

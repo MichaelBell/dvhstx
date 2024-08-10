@@ -10,11 +10,13 @@ extern "C" {
 
 using namespace pimoroni;
 
+#ifdef __riscv
+#define FRAME_WIDTH 400
+#define FRAME_HEIGHT 300
+#else
 #define FRAME_WIDTH 640
 #define FRAME_HEIGHT 360
-
-//#define FRAME_WIDTH 400
-//#define FRAME_HEIGHT 300
+#endif
 
 //#define FRAME_WIDTH 320
 //#define FRAME_HEIGHT 180
@@ -103,9 +105,10 @@ void draw_mandel() {
 }
 
 int main() {
-    stdio_init_all();
-
     display.init(FRAME_WIDTH, FRAME_HEIGHT, DVHSTX::MODE_PALETTE);
+
+    stdio_init_all();
+    while (!stdio_usb_connected());
 
     init_palette();
 
