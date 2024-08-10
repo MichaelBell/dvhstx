@@ -23,6 +23,19 @@ TODO
 
 ## Documentation
 
+Wire up your DVI breakout as follows:
+
+    GPIO 12 - CK-
+    GPIO 13 - CK+
+    GPIO 14 - D0-
+    GPIO 15 - D0+
+    GPIO 16 - D1-
+    GPIO 17 - D1+
+    GPIO 18 - D2-
+    GPIO 19 - D2+
+
+If using jumper jerky, twist the - and + wires for each signal together to help with signal integrity.
+
 TODO
 
 ## C/C++ Resources
