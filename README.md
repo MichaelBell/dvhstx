@@ -15,6 +15,8 @@ This repository is home to the Pimoroni PicoGraphics compatible DVI driver for R
 
 DV HSTX will enable you to create big, bold audio visual projects using MicroPython and an HDMI display of your choice.
 
+![Mandelbrot fractal displayed on a monitor](Mandelbrot.jpg)
+
 ## Download MicroPython
 
 TODO
