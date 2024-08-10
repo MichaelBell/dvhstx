@@ -671,7 +671,7 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_)
     memset(frame_buffer_display, 0, frame_width * frame_height * frame_bytes_per_pixel);
     memset(frame_buffer_back, 0, frame_width * frame_height * frame_bytes_per_pixel);
 
-    memset(palette, 0, PALETTE_SIZE);
+    memset(palette, 0, PALETTE_SIZE * sizeof(palette[0]));
 
     frame_buffer_display = frame_buffer_display;
 

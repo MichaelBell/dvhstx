@@ -31,16 +31,16 @@
 
 struct dvi_timing {
 	bool h_sync_polarity;
-	uint h_front_porch;
-	uint h_sync_width;
-	uint h_back_porch;
-	uint h_active_pixels;
+	int h_front_porch;
+	int h_sync_width;
+	int h_back_porch;
+	int h_active_pixels;
 
 	bool v_sync_polarity;
-	uint v_front_porch;
-	uint v_sync_width;
-	uint v_back_porch;
-	uint v_active_lines;
+	int v_front_porch;
+	int v_sync_width;
+	int v_back_porch;
+	int v_active_lines;
 
 	uint bit_clk_khz;
 };

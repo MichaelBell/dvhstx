@@ -108,7 +108,6 @@ int main() {
     display.init(FRAME_WIDTH, FRAME_HEIGHT, DVHSTX::MODE_PALETTE);
 
     stdio_init_all();
-    while (!stdio_usb_connected());
 
     init_palette();
 

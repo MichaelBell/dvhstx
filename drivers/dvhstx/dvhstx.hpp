@@ -145,8 +145,8 @@ namespace pimoroni {
 
       uint32_t* line_buffers;
       const struct dvi_timing* timing_mode;
-      uint v_inactive_total;
-      uint v_total_active_lines;
+      int v_inactive_total;
+      int v_total_active_lines;
 
       uint h_repeat_shift;
       uint v_repeat_shift;
