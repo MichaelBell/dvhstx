@@ -1,5 +1,5 @@
 #include "pico_graphics.hpp"
-#include "dvhstx.hpp"
+#include "drivers/dvhstx/dvhstx.hpp"
 
 namespace pimoroni {
   enum BlendMode {

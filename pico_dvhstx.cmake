@@ -1,5 +1,5 @@
 
-add_subdirectory(drivers/dvhstx)
+include(drivers/dvhstx/dvhstx)
 
 set(LIB_NAME pico_dvhstx)
 add_library(${LIB_NAME} INTERFACE)

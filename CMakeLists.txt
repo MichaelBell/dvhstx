@@ -15,6 +15,7 @@ pico_sdk_init()
 
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror")
 
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR})
 include(pico_dvhstx.cmake)
 
 add_subdirectory(examples/dvhstx)
