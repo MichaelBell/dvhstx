@@ -25,10 +25,24 @@ extern "C" {
 
 using namespace pimoroni;
 
+#ifdef MICROPY_BUILD_TYPE
+#define FRAME_BUFFER_SIZE (640*360)
+__attribute__((section(".uninitialized_data"))) static uint8_t frame_buffer_a[FRAME_BUFFER_SIZE];
+__attribute__((section(".uninitialized_data"))) static uint8_t frame_buffer_b[FRAME_BUFFER_SIZE];
+#endif
+
 #include "font.h"
 
 // If changing the font, note this code will not handle glyphs wider than 13 pixels
 #define FONT (&intel_one_mono)
+
+#ifdef MICROPY_BUILD_TYPE
+extern "C" {
+void dvhstx_debug(const char *fmt, ...);
+}
+#else
+#define dvhstx_debug printf
+#endif
 
 static inline __attribute__((always_inline)) uint32_t render_char_line(int c, int y) {
     if (c < 0x20 || c > 0x7e) return 0;
@@ -373,6 +387,7 @@ void __scratch_x("display") DVHSTX::text_dma_handler() {
 // ----------------------------------------------------------------------------
 // Experimental clock config
 
+#ifndef MICROPY_BUILD_TYPE
 static void __no_inline_not_in_flash_func(set_qmi_timing)() {
     // Make sure flash is deselected - QMI doesn't appear to have a busy flag(!)
     while ((ioqspi_hw->io[1].status & IO_QSPI_GPIO_QSPI_SS_STATUS_OUTTOPAD_BITS) != IO_QSPI_GPIO_QSPI_SS_STATUS_OUTTOPAD_BITS)
@@ -384,8 +399,11 @@ static void __no_inline_not_in_flash_func(set_qmi_timing)() {
     volatile uint32_t* ptr = (volatile uint32_t*)0x14000000;
     (void) *ptr;
 }
+#endif
 
-void DVHSTX::display_setup_clock() {
+extern "C" void __no_inline_not_in_flash_func(display_setup_clock_preinit)() {
+    uint32_t intr_stash = save_and_disable_interrupts();
+
     // Before messing with clock speeds ensure QSPI clock is nice and slow
     hw_write_masked(&qmi_hw->m[0].timing, 6, QMI_M0_TIMING_CLKDIV_BITS);
 
@@ -395,12 +413,6 @@ void DVHSTX::display_setup_clock() {
     // Force a read through XIP to ensure the timing is applied before raising the clock rate
     volatile uint32_t* ptr = (volatile uint32_t*)0x14000000;
     (void) *ptr;
-
-    const uint32_t dvi_clock_khz = timing_mode->bit_clk_khz >> 1;
-    uint vco_freq, post_div1, post_div2;
-    if (!check_sys_clock_khz(dvi_clock_khz, &vco_freq, &post_div1, &post_div2))
-        panic("System clock of %u kHz cannot be exactly achieved", dvi_clock_khz);
-    const uint32_t freq = vco_freq / (post_div1 * post_div2);
 
     // Before we touch PLLs, switch sys and ref cleanly away from their aux sources.
     hw_clear_bits(&clocks_hw->clk[clk_sys].ctrl, CLOCKS_CLK_SYS_CTRL_SRC_BITS);
@@ -416,8 +428,7 @@ void DVHSTX::display_setup_clock() {
     clock_stop(clk_peri);
     clock_stop(clk_hstx);
 
-    // Set the sys PLL to the requested freq, set USB PLL to 528MHz
-    pll_init(pll_sys, PLL_COMMON_REFDIV, vco_freq, post_div1, post_div2);
+    // Set USB PLL to 528MHz
     pll_init(pll_usb, PLL_COMMON_REFDIV, 1584 * MHZ, 3, 1);
 
     const uint32_t usb_pll_freq = 528 * MHZ;
@@ -448,14 +459,43 @@ void DVHSTX::display_setup_clock() {
                     usb_pll_freq,
                     USB_CLK_KHZ * KHZ);
 
+    // Now we are running fast set fast QSPI clock and read delay
+    // On MicroPython this is setup by main.
+#ifndef MICROPY_BUILD_TYPE
+    set_qmi_timing();
+#endif
+
+    restore_interrupts(intr_stash);
+}
+
+#ifndef MICROPY_BUILD_TYPE
+// Trigger clock setup early - on MicroPython this is done by a hook in main.
+namespace {
+    class DV_preinit {
+        public:
+        DV_preinit() {
+            display_setup_clock_preinit();
+        }
+    };
+    DV_preinit dv_preinit __attribute__ ((init_priority (101))) ;
+}
+#endif
+
+void DVHSTX::display_setup_clock() {
+    const uint32_t dvi_clock_khz = timing_mode->bit_clk_khz >> 1;
+    uint vco_freq, post_div1, post_div2;
+    if (!check_sys_clock_khz(dvi_clock_khz, &vco_freq, &post_div1, &post_div2))
+        panic("System clock of %u kHz cannot be exactly achieved", dvi_clock_khz);
+    const uint32_t freq = vco_freq / (post_div1 * post_div2);
+
+    // Set the sys PLL to the requested freq
+    pll_init(pll_sys, PLL_COMMON_REFDIV, vco_freq, post_div1, post_div2);
+
     // CLK HSTX = Requested freq
     clock_configure(clk_hstx,
                     0,
                     CLOCKS_CLK_HSTX_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
                     freq, freq);
-
-    // Now we are running fast set fast QSPI clock and read delay
-    set_qmi_timing();
 }
 
 void DVHSTX::write_pixel(const Point &p, uint16_t colour)
@@ -613,9 +653,13 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_)
     display = this;
     display_palette = get_palette();
     
+    dvhstx_debug("Setup clock\n");
     display_setup_clock();
 
+#ifndef MICROPY_BUILD_TYPE
     stdio_init_all();
+#endif
+    dvhstx_debug("Clock setup done\n");
 
     v_inactive_total = timing_mode->v_front_porch + timing_mode->v_sync_width + timing_mode->v_back_porch;
     v_total_active_lines = v_inactive_total + timing_mode->v_active_lines;
@@ -666,14 +710,24 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_)
         return false;
     }
 
+#ifdef MICROPY_BUILD_TYPE
+    if (frame_width * frame_height * frame_bytes_per_pixel > sizeof(frame_buffer_a)) {
+        panic("Frame buffer too large");
+    }
+
+    frame_buffer_display = frame_buffer_a;
+    frame_buffer_back = frame_buffer_b;
+#else
     frame_buffer_display = (uint8_t*)malloc(frame_width * frame_height * frame_bytes_per_pixel);
     frame_buffer_back = (uint8_t*)malloc(frame_width * frame_height * frame_bytes_per_pixel);
+#endif
     memset(frame_buffer_display, 0, frame_width * frame_height * frame_bytes_per_pixel);
     memset(frame_buffer_back, 0, frame_width * frame_height * frame_bytes_per_pixel);
 
     memset(palette, 0, PALETTE_SIZE * sizeof(palette[0]));
 
     frame_buffer_display = frame_buffer_display;
+    dvhstx_debug("Frame buffers inited\n");
 
     const bool is_text_mode = (mode == MODE_TEXT_MONO || mode == MODE_TEXT_RGB111);
     const int frame_pixel_words = (frame_width * h_repeat * line_bytes_per_pixel + 3) >> 2;
@@ -815,6 +869,8 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_)
         gpio_set_drive_strength(i, GPIO_DRIVE_STRENGTH_4MA);
     }
 
+    dvhstx_debug("GPIO configured\n");
+
     // Always use the bottom channels
     dma_claim_mask((1 << NUM_CHANS) - 1);
 
@@ -860,17 +916,23 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_)
         );
     }
 
-    dma_hw->ints0 = (1 << NUM_CHANS) - 1;
-    dma_hw->inte0 = (1 << NUM_CHANS) - 1;
-    if (is_text_mode) irq_set_exclusive_handler(DMA_IRQ_0, dma_irq_handler_text);
-    else irq_set_exclusive_handler(DMA_IRQ_0, dma_irq_handler);
-    irq_set_enabled(DMA_IRQ_0, true);
+    dvhstx_debug("DMA channels claimed\n");
+
+    dma_hw->ints2 = (1 << NUM_CHANS) - 1;
+    dma_hw->inte2 = (1 << NUM_CHANS) - 1;
+    if (is_text_mode) irq_set_exclusive_handler(DMA_IRQ_2, dma_irq_handler_text);
+    else irq_set_exclusive_handler(DMA_IRQ_2, dma_irq_handler);
+    irq_set_enabled(DMA_IRQ_2, true);
 
     dma_channel_start(0);
+
+    dvhstx_debug("DVHSTX started\n");
 
     for (int i = 0; i < frame_height; ++i) {
         memset(&frame_buffer_display[i * frame_width * frame_bytes_per_pixel], i, frame_width * frame_bytes_per_pixel);
     }
+
+    dvhstx_debug("Frame buffer filled\n");
 
     return true;
 }
