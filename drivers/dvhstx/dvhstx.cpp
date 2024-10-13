@@ -70,7 +70,7 @@ static inline __attribute__((always_inline)) uint32_t render_char_line(int c, in
 // Lists are padded with NOPs to be >= HSTX FIFO size, to avoid DMA rapidly
 // pingponging and tripping up the IRQs.
 
-static uint32_t vblank_line_vsync_off[] = {
+static const uint32_t vblank_line_vsync_off_src[] = {
     HSTX_CMD_RAW_REPEAT,
     SYNC_V1_H1,
     HSTX_CMD_RAW_REPEAT,
@@ -78,8 +78,9 @@ static uint32_t vblank_line_vsync_off[] = {
     HSTX_CMD_RAW_REPEAT,
     SYNC_V1_H1
 };
+static uint32_t vblank_line_vsync_off[count_of(vblank_line_vsync_off_src)];
 
-static uint32_t vblank_line_vsync_on[] = {
+static const uint32_t vblank_line_vsync_on_src[] = {
     HSTX_CMD_RAW_REPEAT,
     SYNC_V0_H1,
     HSTX_CMD_RAW_REPEAT,
@@ -87,8 +88,9 @@ static uint32_t vblank_line_vsync_on[] = {
     HSTX_CMD_RAW_REPEAT,
     SYNC_V0_H1
 };
+static uint32_t vblank_line_vsync_on[count_of(vblank_line_vsync_on_src)];
 
-static uint32_t vactive_line_header[] = {
+static const uint32_t vactive_line_header_src[] = {
     HSTX_CMD_RAW_REPEAT,
     SYNC_V1_H1,
     HSTX_CMD_RAW_REPEAT,
@@ -97,8 +99,9 @@ static uint32_t vactive_line_header[] = {
     SYNC_V1_H1,
     HSTX_CMD_TMDS      
 };
+static uint32_t vactive_line_header[count_of(vactive_line_header_src)];
 
-static uint32_t vactive_text_line_header[] = {
+static const uint32_t vactive_text_line_header_src[] = {
     HSTX_CMD_RAW_REPEAT,
     SYNC_V1_H1,
     HSTX_CMD_RAW_REPEAT,
@@ -114,6 +117,7 @@ static uint32_t vactive_text_line_header[] = {
     BLACK_PIXEL_B,
     HSTX_CMD_TMDS
 };
+static uint32_t vactive_text_line_header[count_of(vactive_text_line_header_src)];
 
 #define NUM_FRAME_LINES 2
 #define NUM_CHANS 3
@@ -572,8 +576,21 @@ void DVHSTX::clear()
     memset(frame_buffer_back, 0, frame_width * frame_height * frame_bytes_per_pixel);
 }
 
+DVHSTX::DVHSTX()
+{
+    // Always use the bottom channels
+    dma_claim_mask((1 << NUM_CHANS) - 1);
+}
+
 bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_)
 {
+    if (inited) reset();
+
+    ch_num = 0;
+    line_num = -1;
+    v_scanline = 2;
+    flip_next = false;
+
     display_width = width;
     display_height = height;
     frame_width = width;
@@ -646,7 +663,7 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_)
     }
 
     if (!timing_mode) {
-        printf("Unsupported resolution %dx%d", width, height);
+        dvhstx_debug("Unsupported resolution %dx%d", width, height);
         return false;
     }
 
@@ -666,19 +683,23 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_)
     v_repeat = 1 << v_repeat_shift;
     h_repeat = 1 << h_repeat_shift;
 
+    memcpy(vblank_line_vsync_off, vblank_line_vsync_off_src, sizeof(vblank_line_vsync_off_src));
     vblank_line_vsync_off[0] |= timing_mode->h_front_porch;
     vblank_line_vsync_off[2] |= timing_mode->h_sync_width;
     vblank_line_vsync_off[4] |= timing_mode->h_back_porch + timing_mode->h_active_pixels;
 
+    memcpy(vblank_line_vsync_on, vblank_line_vsync_on_src, sizeof(vblank_line_vsync_on_src));
     vblank_line_vsync_on[0] |= timing_mode->h_front_porch;
     vblank_line_vsync_on[2] |= timing_mode->h_sync_width;
     vblank_line_vsync_on[4] |= timing_mode->h_back_porch + timing_mode->h_active_pixels;
 
+    memcpy(vactive_line_header, vactive_line_header_src, sizeof(vactive_line_header_src));
     vactive_line_header[0] |= timing_mode->h_front_porch;
     vactive_line_header[2] |= timing_mode->h_sync_width;
     vactive_line_header[4] |= timing_mode->h_back_porch;
     vactive_line_header[6] |= timing_mode->h_active_pixels;
 
+    memcpy(vactive_text_line_header, vactive_text_line_header_src, sizeof(vactive_text_line_header_src));
     vactive_text_line_header[0] |= timing_mode->h_front_porch;
     vactive_text_line_header[2] |= timing_mode->h_sync_width;
     vactive_text_line_header[4] |= timing_mode->h_back_porch;
@@ -706,7 +727,7 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_)
         line_bytes_per_pixel = 14;
         break;
     default:
-        printf("Unsupported mode %d", (int)mode);
+        dvhstx_debug("Unsupported mode %d", (int)mode);
         return false;
     }
 
@@ -751,6 +772,12 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_)
             }
         }
     }
+
+    // Ensure HSTX FIFO is clear
+    reset_block_num(RESET_HSTX);
+    sleep_us(10);
+    unreset_block_num_wait_blocking(RESET_HSTX);
+    sleep_us(10);
 
     switch (mode) {
     case MODE_RGB565:
@@ -830,7 +857,7 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_)
         break;
 
     default:
-        printf("Unsupported mode %d", (int)mode);
+        dvhstx_debug("Unsupported mode %d", (int)mode);
         return false;
     }
 
@@ -870,9 +897,6 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_)
     }
 
     dvhstx_debug("GPIO configured\n");
-
-    // Always use the bottom channels
-    dma_claim_mask((1 << NUM_CHANS) - 1);
 
     // The channels are set up identically, to transfer a whole scanline and
     // then chain to the next channel. Each time a channel finishes, we
@@ -918,6 +942,7 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_)
 
     dvhstx_debug("DMA channels claimed\n");
 
+    dma_hw->intr = (1 << NUM_CHANS) - 1;
     dma_hw->ints2 = (1 << NUM_CHANS) - 1;
     dma_hw->inte2 = (1 << NUM_CHANS) - 1;
     if (is_text_mode) irq_set_exclusive_handler(DMA_IRQ_2, dma_irq_handler_text);
@@ -934,7 +959,32 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_)
 
     dvhstx_debug("Frame buffer filled\n");
 
+    inited = true;
     return true;
+}
+
+void DVHSTX::reset() {
+    if (!inited) return;
+    inited = false;
+
+    hstx_ctrl_hw->csr = 0;
+
+    irq_set_enabled(DMA_IRQ_2, false);
+    irq_remove_handler(DMA_IRQ_2, irq_get_exclusive_handler(DMA_IRQ_2));
+
+    for (int i = 0; i < NUM_CHANS; ++i)
+        dma_channel_abort(i);
+
+    if (font_cache) {
+        free(font_cache);
+        font_cache = nullptr;
+    }
+    free(line_buffers);
+
+#ifndef MICROPY_BUILD_TYPE
+    free(frame_buffer_display);
+    free(frame_buffer_back);
+#endif
 }
 
 void DVHSTX::flip_blocking() {

@@ -59,14 +59,12 @@ namespace pimoroni {
     uint16_t frame_width = 320;
     uint16_t frame_height = 180;
     uint8_t frame_bytes_per_pixel = 2;
-    uint8_t bank = 0;
     uint8_t h_repeat = 4;
     uint8_t v_repeat = 4;
     Mode mode = MODE_RGB565;
 
   public:
-    DVHSTX()
-    {}
+    DVHSTX();
 
     //--------------------------------------------------
     // Methods
@@ -95,6 +93,7 @@ namespace pimoroni {
       void clear();
 
       bool init(uint16_t width, uint16_t height, Mode mode = MODE_RGB565);
+      void reset();
 
       // Wait for vsync and then flip the buffers
       void flip_blocking();
@@ -118,7 +117,7 @@ namespace pimoroni {
 
       uint8_t* frame_buffer_display;
       uint8_t* frame_buffer_back;
-      uint32_t* font_cache;
+      uint32_t* font_cache = nullptr;
 
       uint16_t* point_to_ptr16(const Point &p) const {
         return ((uint16_t*)frame_buffer_back) + (p.y * (uint32_t)frame_width) + p.x;
@@ -142,6 +141,8 @@ namespace pimoroni {
 
       volatile int v_scanline = 2;
       volatile bool flip_next;
+
+      bool inited = false;
 
       uint32_t* line_buffers;
       const struct dvi_timing* timing_mode;

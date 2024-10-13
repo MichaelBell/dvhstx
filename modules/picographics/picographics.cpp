@@ -123,7 +123,13 @@ mp_obj_t ModPicoGraphics_make_new(const mp_obj_type_t *type, size_t n_args, size
 }
 
 mp_obj_t ModPicoGraphics__del__(mp_obj_t self_in) {
-    //dv_display.reset();
+    ModPicoGraphics_obj_t *self = MP_OBJ_TO_PTR2(self_in, ModPicoGraphics_obj_t);
+
+    dv_display.reset();
+    if (self->graphics) {
+        m_del_class(PicoGraphicsDVHSTX, self->graphics);
+        self->graphics = nullptr;
+    }
     return mp_const_none;
 }
 
