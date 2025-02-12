@@ -891,26 +891,26 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_)
     // HSTX outputs 0 through 7 appear on GPIO 12 through 19.
 
     // Assign clock pair to two neighbouring pins:
-    hstx_ctrl_hw->bit[1] = HSTX_CTRL_BIT0_CLK_BITS;
-    hstx_ctrl_hw->bit[0] = HSTX_CTRL_BIT0_CLK_BITS | HSTX_CTRL_BIT0_INV_BITS;
+    hstx_ctrl_hw->bit[2] = HSTX_CTRL_BIT0_CLK_BITS;
+    hstx_ctrl_hw->bit[3] = HSTX_CTRL_BIT0_CLK_BITS | HSTX_CTRL_BIT0_INV_BITS;
     for (uint lane = 0; lane < 3; ++lane) {
         // For each TMDS lane, assign it to the correct GPIO pair based on the
         // desired pinout:
-        static const int lane_to_output_bit[3] = {2, 4, 6};
+        static const int lane_to_output_bit[3] = {0, 6, 4};
         int bit = lane_to_output_bit[lane];
         // Output even bits during first half of each HSTX cycle, and odd bits
         // during second half. The shifter advances by two bits each cycle.
         uint32_t lane_data_sel_bits =
             (lane * 10    ) << HSTX_CTRL_BIT0_SEL_P_LSB |
             (lane * 10 + 1) << HSTX_CTRL_BIT0_SEL_N_LSB;
-        // The two halves of each pair get identical data, but one pin is inverted.
-        hstx_ctrl_hw->bit[bit    ] = lane_data_sel_bits | HSTX_CTRL_BIT0_INV_BITS;
-        hstx_ctrl_hw->bit[bit + 1] = lane_data_sel_bits;
+            
+            hstx_ctrl_hw->bit[bit    ] = lane_data_sel_bits;
+            hstx_ctrl_hw->bit[bit + 1] = lane_data_sel_bits | HSTX_CTRL_BIT0_INV_BITS;
     }
 
     for (int i = 12; i <= 19; ++i) {
         gpio_set_function(i, GPIO_FUNC_HSTX);
-        gpio_set_drive_strength(i, GPIO_DRIVE_STRENGTH_4MA);
+        //gpio_set_drive_strength(i, GPIO_DRIVE_STRENGTH_4MA);
     }
 
     dvhstx_debug("GPIO configured\n");
