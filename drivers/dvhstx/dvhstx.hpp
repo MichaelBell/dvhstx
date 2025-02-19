@@ -29,6 +29,10 @@ namespace pimoroni {
   public:
     static constexpr int PALETTE_SIZE = 256;
 
+    struct Pinout {
+        uint8_t clk_p, rgb_p[3];
+    };
+
     enum Mode {
       MODE_PALETTE = 2,
       MODE_RGB565 = 1,
@@ -92,7 +96,7 @@ namespace pimoroni {
 
       void clear();
 
-      bool init(uint16_t width, uint16_t height, Mode mode = MODE_RGB565);
+      bool init(uint16_t width, uint16_t height, Mode mode = MODE_RGB565, Pinout pinout = {13, 15, 17, 19});
       void reset();
 
       // Wait for vsync and then flip the buffers
