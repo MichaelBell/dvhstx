@@ -36,6 +36,14 @@ __attribute__((section(".uninitialized_data"))) static uint8_t frame_buffer_b[FR
 // If changing the font, note this code will not handle glyphs wider than 13 pixels
 #define FONT (&intel_one_mono)
 
+// The first displayable character in text mode is FIRST_GLYPH, and the total
+// number of glyphs is GLYPH_COUNT. This makes the last displayable character
+// (FIRST_GLYPH + GLYPH_COUNT - 1) or 126, ASCII tilde.
+//
+// Because all glyphs not present in the cache are displayed as blank, there's
+// no need to include space among the cached glyphs.
+constexpr int FIRST_GLYPH=33, GLYPH_COUNT=95;
+
 #ifdef MICROPY_BUILD_TYPE
 extern "C" {
 void dvhstx_debug(const char *fmt, ...);
@@ -262,8 +270,8 @@ void __scratch_x("display") DVHSTX::text_dma_handler() {
             uint8_t* colour_ptr = src_ptr + frame_width * frame_height;
 #ifdef __riscv
             for (int i = 0; i < frame_width; ++i) {
-                const uint8_t c = (*src_ptr++ - 0x20);
-                uint32_t bits = (c < 95) ? font_cache[c * 24 + char_y] : 0;
+                const uint8_t c = (*src_ptr++ - FIRST_GLYPH);
+                uint32_t bits = (c < GLYPH_COUNT) ? font_cache[c * 24 + char_y] : 0;
                 const uint8_t colour = *colour_ptr++;
 
                 *dst_ptr++ = colour * ((bits >> 24) & 3);
@@ -284,11 +292,11 @@ void __scratch_x("display") DVHSTX::text_dma_handler() {
 #else
             int i = 0;
             for (; i < frame_width-1; i += 2) {
-                uint8_t c = (*src_ptr++ - 0x20);
-                uint32_t bits = (c < 95) ? font_cache[c * 24 + char_y] : 0;
+                uint8_t c = (*src_ptr++ - FIRST_GLYPH);
+                uint32_t bits = (c < GLYPH_COUNT) ? font_cache[c * 24 + char_y] : 0;
                 uint8_t colour = *colour_ptr++;
-                c = (*src_ptr++ - 0x20);
-                uint32_t bits2 = (c < 95) ? font_cache[c * 24 + char_y] : 0;
+                c = (*src_ptr++ - FIRST_GLYPH);
+                uint32_t bits2 = (c < GLYPH_COUNT) ? font_cache[c * 24 + char_y] : 0;
                 uint8_t colour2 = *colour_ptr++;
 
                 // This ASM works around a compiler bug where the optimizer decides
@@ -371,8 +379,8 @@ void __scratch_x("display") DVHSTX::text_dma_handler() {
                 dst_ptr += 14 * 2;                
             }
             if (i != frame_width) {
-                const uint8_t c = (*src_ptr++ - 0x20);
-                uint32_t bits = (c < 95) ? font_cache[c * 24 + char_y] : 0;
+                const uint8_t c = (*src_ptr++ - FIRST_GLYPH);
+                uint32_t bits = (c < GLYPH_COUNT) ? font_cache[c * 24 + char_y] : 0;
                 const uint8_t colour = *colour_ptr++;
 
                 *dst_ptr++ = colour * ((bits >> 24) & 3);
@@ -781,11 +789,11 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_)
 
     if (mode == MODE_TEXT_RGB111) {
         // Need to pre-render the font to RAM to be fast enough.
-        font_cache = (uint32_t*)malloc(4 * FONT->line_height * 95);
+        font_cache = (uint32_t*)malloc(4 * FONT->line_height * GLYPH_COUNT);
         uint32_t* font_cache_ptr = font_cache;
-        for (int c = 0x20; c < 128; ++c) {
+        for (int c = 0; c < GLYPH_COUNT; ++c) {
             for (int y = 0; y < FONT->line_height; ++y) {
-                *font_cache_ptr++ = render_char_line(c, y);
+                *font_cache_ptr++ = render_char_line(c + FIRST_GLYPH, y);
             }
         }
     }
