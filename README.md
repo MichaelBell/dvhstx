@@ -42,7 +42,7 @@ Other pinouts can be used by passing a `pinout` parameter to the `init`
 function.
 This pinout consists of 4 numbers giving the *positive* pin in each differential pair, in the order CK, D0, D1, D2, D3, using GPIO numbering.
 The default pinout is written `{13, 15, 17, 19}`.
-Only pin numbers from 12 to 20 are valid, as other pins are not connected to the HSTX peripheral.
+Only pin numbers from 12 to 19 are valid, as other pins are not connected to the HSTX peripheral.
 Using invalid pin numbers is an undignosed error.
 
 TODO

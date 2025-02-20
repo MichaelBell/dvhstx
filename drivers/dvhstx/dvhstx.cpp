@@ -910,7 +910,7 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_, Pinout pinout)
         // The two halves of each pair get identical data, but one pin is inverted.
         hstx_ctrl_hw->bit[bit    ] = lane_data_sel_bits;
         hstx_ctrl_hw->bit[bit ^ 1] = lane_data_sel_bits | HSTX_CTRL_BIT0_INV_BITS;
-}
+    }
 
     for (int i = 12; i <= 19; ++i) {
         gpio_set_function(i, GPIO_FUNC_HSTX);
