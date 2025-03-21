@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "hardware/uart.h"
+#include "hardware/adc.h"
 #include "pico/multicore.h"
 #include "drivers/dvhstx/dvhstx.hpp"
 #include "libraries/pico_graphics/pico_graphics_dvhstx.hpp"
@@ -104,10 +105,32 @@ void draw_mandel() {
     display.flip_now();
 }
 
+/* References for this implementation:
+ * raspberry-pi-pico-c-sdk.pdf, Section '4.1.1. hardware_adc'
+ * pico-examples/adc/adc_console/adc_console.c */
+float read_onboard_temperature() {
+    
+    /* 12-bit conversion, assume max value == ADC_VREF == 3.3 V */
+    const float conversionFactor = 3.3f / (1 << 12);
+
+    float adc = (float)adc_read() * conversionFactor;
+    float tempC = 27.0f - (adc - 0.706f) / 0.001721f;
+
+    return tempC;
+}
+
 int main() {
     display.init(FRAME_WIDTH, FRAME_HEIGHT, DVHSTX::MODE_PALETTE);
 
     stdio_init_all();
+    //while (!stdio_usb_connected());
+
+    /* Initialize hardware AD converter, enable onboard temperature sensor and
+     *   select its channel (do this once for efficiency, but beware that this
+     *   is a global operation). */
+    adc_init();
+    adc_set_temp_sensor_enabled(true);
+    adc_select_input(4);
 
     init_palette();
 
@@ -125,6 +148,9 @@ int main() {
         absolute_time_t start_time = get_absolute_time();
         zoom_mandel();
         draw_mandel();
-        printf("Drawing zoom %ld took %.2fms\n", zoom_count, absolute_time_diff_us(start_time, get_absolute_time()) * 0.001f);
+        printf("Drawing zoom %ld took %.2fms\t", zoom_count, absolute_time_diff_us(start_time, get_absolute_time()) * 0.001f);
+
+        const float temperature = read_onboard_temperature();
+        printf("Temp = %.02fC\n", temperature);
     }
 }

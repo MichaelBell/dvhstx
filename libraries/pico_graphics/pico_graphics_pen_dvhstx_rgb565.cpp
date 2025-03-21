@@ -66,7 +66,7 @@ namespace pimoroni {
         driver.write_pixel(p, blended);
     }
 
-    bool PicoGraphics_PenDVHSTX_RGB565::render_pico_vector_tile(const Rect &src_bounds, uint8_t* alpha_data, uint32_t stride, uint8_t alpha_type) {
+    bool PicoGraphics_PenDVHSTX_RGB565::render_tile(const Tile* tile) {
         return false;
     }
 }

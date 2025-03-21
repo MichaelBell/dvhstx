@@ -517,6 +517,18 @@ void DVHSTX::display_setup_clock() {
         panic("System clock of %u kHz cannot be exactly achieved", dvi_clock_khz);
     const uint32_t freq = vco_freq / (post_div1 * post_div2);
 
+    if (timing_mode->bit_clk_khz > 600000) {
+        vreg_set_voltage(VREG_VOLTAGE_1_25);
+    } else if (timing_mode->bit_clk_khz > 800000) {
+        // YOLO mode
+        hw_set_bits(&powman_hw->vreg_ctrl, POWMAN_PASSWORD_BITS | POWMAN_VREG_CTRL_DISABLE_VOLTAGE_LIMIT_BITS);
+        vreg_set_voltage(VREG_VOLTAGE_1_40);
+        if (timing_mode->bit_clk_khz > 900000) {
+            vreg_set_voltage(VREG_VOLTAGE_1_50);
+        }
+        sleep_ms(1);
+    }
+
     // Set the sys PLL to the requested freq
     pll_init(pll_sys, PLL_COMMON_REFDIV, vco_freq, post_div1, post_div2);
 
@@ -923,6 +935,9 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_, Pinout pinout)
     for (int i = 12; i <= 19; ++i) {
         gpio_set_function(i, GPIO_FUNC_HSTX);
         gpio_set_drive_strength(i, GPIO_DRIVE_STRENGTH_4MA);
+        if (timing_mode->bit_clk_khz > 900000) {
+            gpio_set_slew_rate(i, GPIO_SLEW_RATE_FAST);
+        }
     }
 
     dvhstx_debug("GPIO configured\n");

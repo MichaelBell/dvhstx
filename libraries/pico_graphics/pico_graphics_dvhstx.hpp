@@ -46,7 +46,7 @@ namespace pimoroni {
 
       bool supports_alpha_blend() override {return true;}
 
-      bool render_pico_vector_tile(const Rect &bounds, uint8_t* alpha_data, uint32_t stride, uint8_t alpha_type) override;
+      bool render_tile(const Tile *tile) override;
 
       static size_t buffer_size(uint w, uint h) {
         return w * h * sizeof(RGB565);

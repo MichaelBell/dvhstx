@@ -247,6 +247,24 @@ const struct dvi_timing dvi_timing_1920x1080p_rb2_30hz = {
 	.bit_clk_khz       = 660000
 };
 
+// 1080p48 YOLO - may require more than 1.3V, and sorting through your 
+// devboards to find one that gives a clean signal.
+const struct dvi_timing dvi_timing_1920x1080p_yolo_48hz = {
+        .h_sync_polarity   = true,
+        .h_front_porch     = 8,
+        .h_sync_width      = 16,
+        .h_back_porch      = 24,
+        .h_active_pixels   = 1920,
+
+        .v_sync_polarity   = false,
+        .v_front_porch     = 4,
+        .v_sync_width      = 2,
+        .v_back_porch      = 6,
+        .v_active_lines    = 1080,
+
+        .bit_clk_khz       = 1032000
+};
+
 // 1440p24 YOLO - works on my Dell Ultrasharp, that most forgiving of monitors.  May require a little more than 1.3V
 const struct dvi_timing dvi_timing_2560x1440p_yolo_24hz = {
 	.h_sync_polarity   = true,
