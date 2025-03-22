@@ -17,4 +17,4 @@ target_compile_options(${DRIVER_NAME} INTERFACE -Wall -Werror -O2 -fgcse-after-r
 target_include_directories(${DRIVER_NAME} INTERFACE ${CMAKE_CURRENT_LIST_DIR})
 
 # Pull in pico libraries that we need
-target_link_libraries(${DRIVER_NAME} INTERFACE pico_stdlib)
+target_link_libraries(${DRIVER_NAME} INTERFACE pico_stdlib aps6404 aps6408)

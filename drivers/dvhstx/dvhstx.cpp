@@ -135,11 +135,11 @@ static DVHSTX* display = nullptr;
 // ----------------------------------------------------------------------------
 // DMA logic
 
-void __scratch_x("display") dma_irq_handler() {
+void __no_inline_not_in_flash_func(dma_irq_handler)() {
     display->gfx_dma_handler();
 }
 
-void __scratch_x("display") DVHSTX::gfx_dma_handler() {
+void __no_inline_not_in_flash_func(DVHSTX::gfx_dma_handler)() {
     // ch_num indicates the channel that just finished, which is the one
     // we're about to reload.
     dma_channel_hw_t *ch = &dma_hw->ch[ch_num];
@@ -155,7 +155,8 @@ void __scratch_x("display") DVHSTX::gfx_dma_handler() {
     } else {
         const int y = (v_scanline - v_inactive_total) >> v_repeat_shift;
         const int new_line_num = (v_repeat_shift == 0) ? ch_num : (y & (NUM_FRAME_LINES - 1));
-        const uint line_buf_total_len = ((timing_mode->h_active_pixels * line_bytes_per_pixel) >> 2) + count_of(vactive_line_header);
+        const int line_len = timing_mode->h_active_pixels * line_bytes_per_pixel;
+        const uint line_buf_total_len = (line_len >> 2) + count_of(vactive_line_header);
 
         ch->read_addr = (uintptr_t)&line_buffers[new_line_num * line_buf_total_len];
         ch->transfer_count = line_buf_total_len;
@@ -166,54 +167,71 @@ void __scratch_x("display") DVHSTX::gfx_dma_handler() {
             line_num = new_line_num;
             uint32_t* dst_ptr = &line_buffers[line_num * line_buf_total_len + count_of(vactive_line_header)];
 
-            if (line_bytes_per_pixel == 2) {
-                uint16_t* src_ptr = (uint16_t*)&frame_buffer_display[y * 2 * (timing_mode->h_active_pixels >> h_repeat_shift)];
-                if (h_repeat_shift == 2) {
-                    for (int i = 0; i < timing_mode->h_active_pixels >> 1; i += 2) {
-                        uint32_t val = (uint32_t)(*src_ptr++) * 0x10001;
-                        *dst_ptr++ = val;
-                        *dst_ptr++ = val;
-                    }
+            if (blank) {
+                memset(dst_ptr, 0, line_len);
+            }
+            else if (psram_display) {
+                if (layout == MEM_DOUBLE_APS6404) {
+                    psram_display->read(y * line_len, dst_ptr, line_len >> 2);
                 }
                 else {
-                    for (int i = 0; i < timing_mode->h_active_pixels >> 1; ++i) {
-                        uint32_t val = (uint32_t)(*src_ptr++) * 0x10001;
-                        *dst_ptr++ = val;
-                    }
+                    APS6404* psram = (y & 1) ? psram_back : psram_display;
+                    psram->read((y >> 1) * line_len, dst_ptr, line_len >> 2);
                 }
             }
-            else if (line_bytes_per_pixel == 1) {
-                uint8_t* src_ptr = &frame_buffer_display[y * (timing_mode->h_active_pixels >> h_repeat_shift)];
-                if (h_repeat_shift == 2) {
-                    for (int i = 0; i < timing_mode->h_active_pixels >> 2; ++i) {
-                        uint32_t val = (uint32_t)(*src_ptr++) * 0x01010101;
-                        *dst_ptr++ = val;
-                    }                
-                }
-                else {
-                    for (int i = 0; i < timing_mode->h_active_pixels >> 2; ++i) {
-                        uint32_t val = ((uint32_t)(*src_ptr++) * 0x0101);
-                        val |= ((uint32_t)(*src_ptr++) * 0x01010000);
-                        *dst_ptr++ = val;
-                    }
-                }
+            else if (psram8) {
+                psram8->read(y * line_len, dst_ptr, line_len >> 2);
             }
-            else if (line_bytes_per_pixel == 4) {
-                uint8_t* src_ptr = &frame_buffer_display[y * (timing_mode->h_active_pixels >> h_repeat_shift)];
-                if (h_repeat_shift == 2) {
-                    for (int i = 0; i < timing_mode->h_active_pixels; i += 4) {
-                        uint32_t val = display_palette[*src_ptr++];
-                        *dst_ptr++ = val;
-                        *dst_ptr++ = val;
-                        *dst_ptr++ = val;
-                        *dst_ptr++ = val;
+            else {
+                if (line_bytes_per_pixel == 2) {
+                    uint16_t* src_ptr = (uint16_t*)&frame_buffer_display[y * 2 * (timing_mode->h_active_pixels >> h_repeat_shift)];
+                    if (h_repeat_shift == 2) {
+                        for (int i = 0; i < timing_mode->h_active_pixels >> 1; i += 2) {
+                            uint32_t val = (uint32_t)(*src_ptr++) * 0x10001;
+                            *dst_ptr++ = val;
+                            *dst_ptr++ = val;
+                        }
+                    }
+                    else {
+                        for (int i = 0; i < timing_mode->h_active_pixels >> 1; ++i) {
+                            uint32_t val = (uint32_t)(*src_ptr++) * 0x10001;
+                            *dst_ptr++ = val;
+                        }
                     }
                 }
-                else {
-                    for (int i = 0; i < timing_mode->h_active_pixels; i += 2) {
-                        uint32_t val = display_palette[*src_ptr++];
-                        *dst_ptr++ = val;
-                        *dst_ptr++ = val;
+                else if (line_bytes_per_pixel == 1) {
+                    uint8_t* src_ptr = &frame_buffer_display[y * (timing_mode->h_active_pixels >> h_repeat_shift)];
+                    if (h_repeat_shift == 2) {
+                        for (int i = 0; i < timing_mode->h_active_pixels >> 2; ++i) {
+                            uint32_t val = (uint32_t)(*src_ptr++) * 0x01010101;
+                            *dst_ptr++ = val;
+                        }                
+                    }
+                    else {
+                        for (int i = 0; i < timing_mode->h_active_pixels >> 2; ++i) {
+                            uint32_t val = ((uint32_t)(*src_ptr++) * 0x0101);
+                            val |= ((uint32_t)(*src_ptr++) * 0x01010000);
+                            *dst_ptr++ = val;
+                        }
+                    }
+                }
+                else if (line_bytes_per_pixel == 4) {
+                    uint8_t* src_ptr = &frame_buffer_display[y * (timing_mode->h_active_pixels >> h_repeat_shift)];
+                    if (h_repeat_shift == 2) {
+                        for (int i = 0; i < timing_mode->h_active_pixels; i += 4) {
+                            uint32_t val = display_palette[*src_ptr++];
+                            *dst_ptr++ = val;
+                            *dst_ptr++ = val;
+                            *dst_ptr++ = val;
+                            *dst_ptr++ = val;
+                        }
+                    }
+                    else {
+                        for (int i = 0; i < timing_mode->h_active_pixels; i += 2) {
+                            uint32_t val = display_palette[*src_ptr++];
+                            *dst_ptr++ = val;
+                            *dst_ptr++ = val;
+                        }
                     }
                 }
             }
@@ -224,6 +242,12 @@ void __scratch_x("display") DVHSTX::gfx_dma_handler() {
         v_scanline = 0;
         line_num = -1;
         if (flip_next) {
+            if (psram_display) {
+                psram_display->wait_for_finish_blocking();
+                if (layout == MEM_COMBINED_APS6404) {
+                    psram_back->wait_for_finish_blocking();
+                }
+            }
             flip_next = false;
             display->flip_now();
         }
@@ -523,7 +547,7 @@ void DVHSTX::display_setup_clock() {
         // YOLO mode
         hw_set_bits(&powman_hw->vreg_ctrl, POWMAN_PASSWORD_BITS | POWMAN_VREG_CTRL_DISABLE_VOLTAGE_LIMIT_BITS);
         vreg_set_voltage(VREG_VOLTAGE_1_40);
-        if (timing_mode->bit_clk_khz > 900000) {
+        if (timing_mode->bit_clk_khz > 1000000) {
             vreg_set_voltage(VREG_VOLTAGE_1_50);
         }
         sleep_ms(1);
@@ -541,25 +565,88 @@ void DVHSTX::display_setup_clock() {
 
 void DVHSTX::write_pixel(const Point &p, uint16_t colour)
 {
-    *point_to_ptr16(p) = colour;
+    if (psram_back) {
+        uint32_t data = colour;
+        if (layout == MEM_DOUBLE_APS6404) {
+            psram_back->write(point_to_addr16(p), &data, 2);
+            psram_back->wait_for_finish_blocking();
+        } else if (layout == MEM_COMBINED_APS6404) {
+            APS6404* psram = (p.y & 1) ? psram_back : psram_display;
+            Point mp(p.x, p.y >> 1);
+            psram->write(point_to_addr16(mp), &data, 2);
+            psram->wait_for_finish_blocking();
+        }
+    }
+    else {
+        *point_to_ptr16(p) = colour;
+    }
 }
 
 void DVHSTX::write_pixel_span(const Point &p, uint l, uint16_t colour)
 {
-    uint16_t* ptr = point_to_ptr16(p);
-    for (uint i = 0; i < l; ++i) ptr[i] = colour;
+    if (psram_back) {
+        uint32_t data = colour | (colour << 16);
+        if (layout == MEM_DOUBLE_APS6404) {
+            psram_back->write_repeat(point_to_addr16(p), data, l << 1);
+        } else if (layout == MEM_COMBINED_APS6404) {
+            APS6404* psram = (p.y & 1) ? psram_back : psram_display;
+            Point mp(p.x, p.y >> 1);
+            psram->write_repeat(point_to_addr16(mp), data, l << 1);
+        }
+    }
+    else if (psram8) {
+        uint32_t data = colour | (colour << 16);
+        psram8->write_repeat(point_to_addr16(p), data, l << 1);
+    }
+    else {
+        uint16_t* ptr = point_to_ptr16(p);
+        for (uint i = 0; i < l; ++i) ptr[i] = colour;
+    }
 }
 
 void DVHSTX::write_pixel_span(const Point &p, uint l, uint16_t *data)
 {
-    uint16_t* ptr = point_to_ptr16(p);
-    for (uint i = 0; i < l; ++i) ptr[i] = data[i];
+    if (psram_back) {
+        if (layout == MEM_DOUBLE_APS6404) {
+            Point mp(p);
+            if ((uintptr_t)data & 3) {
+                uint32_t tmp = *data++;
+                --l;
+                mp.x++;
+                psram_back->write_blocking(point_to_addr16(p), &tmp, 2);
+            }
+            psram_back->write_blocking(point_to_addr16(mp), (uint32_t*)data, l << 1);
+        } else if (layout == MEM_COMBINED_APS6404) {
+            APS6404* psram = (p.y & 1) ? psram_back : psram_display;
+            Point mp(p.x, p.y >> 1);
+            if ((uintptr_t)data & 3) {
+                uint32_t tmp = *data++;
+                --l;
+                mp.x++;
+                psram->write_blocking(point_to_addr16(mp), &tmp, 2);
+            }
+            psram->write_blocking(point_to_addr16(mp), (uint32_t*)data, l << 1);
+        }
+    }
+    else if (psram8) {
+        psram8->write_blocking(point_to_addr16(p), (uint32_t*)data, l >> 1);
+    }
+    else {
+        uint16_t* ptr = point_to_ptr16(p);
+        for (uint i = 0; i < l; ++i) ptr[i] = data[i];
+    }
 }
 
 void DVHSTX::read_pixel_span(const Point &p, uint l, uint16_t *data)
 {
-    const uint16_t* ptr = point_to_ptr16(p);
-    for (uint i = 0; i < l; ++i) data[i] = ptr[i];
+    if (psram_back) {
+        // TODO: This doesn't entirely work.
+        psram_back->read_blocking(point_to_addr16(p), (uint32_t*)data, l >> 1);
+    }
+    else {
+        const uint16_t* ptr = point_to_ptr16(p);
+        for (uint i = 0; i < l; ++i) data[i] = ptr[i];
+    }
 }
 
 void DVHSTX::set_palette(RGB888 new_palette[PALETTE_SIZE])
@@ -619,7 +706,7 @@ DVHSTX::DVHSTX()
     dma_claim_mask((1 << NUM_CHANS) - 1);
 }
 
-bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_, Pinout pinout)
+bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_, Pinout pinout, MemoryLayout layout_)
 {
     if (inited) reset();
 
@@ -633,6 +720,7 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_, Pinout pinout)
     frame_width = width;
     frame_height = height;
     mode = mode_;
+    layout = layout_;
 
     timing_mode = nullptr;
     if (mode == MODE_TEXT_MONO || mode == MODE_TEXT_RGB111) {
@@ -657,9 +745,9 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_, Pinout pinout)
         timing_mode = &dvi_timing_1280x720p_rb_50hz;
     }
     else if (width == 480 && height == 270) {
-        h_repeat_shift = 2;
-        v_repeat_shift = 2;
-        timing_mode = &dvi_timing_1920x1080p_rb2_30hz;
+        h_repeat_shift = 1;
+        v_repeat_shift = 1;
+        timing_mode = &dvi_timing_960x540p_60hz;
     }
     else
     {
@@ -696,6 +784,15 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_, Pinout pinout)
         }
         else if (full_width == 1024) {
             if (full_height == 768) timing_mode = &dvi_timing_1024x768_rb_60hz;
+        }
+        else if (full_width == 1280) {
+            if (full_height == 720) timing_mode = &dvi_timing_1280x720p_rb_50hz;
+        }
+        else if (full_width == 1920) {
+            if (full_height == 1080) timing_mode = &dvi_timing_1920x1080p_rb2_30hz;
+        }
+        else if (full_width == 2560) {
+            if (full_height == 1440) timing_mode = &dvi_timing_2560x1440p_yolo_24hz;
         }
     }
 
@@ -768,23 +865,34 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_, Pinout pinout)
         return false;
     }
 
+    if (layout == MEM_DOUBLE_BUFFER) {
 #ifdef MICROPY_BUILD_TYPE
-    if (frame_width * frame_height * frame_bytes_per_pixel > sizeof(frame_buffer_a)) {
-        panic("Frame buffer too large");
-    }
+        if (frame_width * frame_height * frame_bytes_per_pixel > sizeof(frame_buffer_a)) {
+            panic("Frame buffer too large");
+        }
 
-    frame_buffer_display = frame_buffer_a;
-    frame_buffer_back = frame_buffer_b;
+        frame_buffer_display = frame_buffer_a;
+        frame_buffer_back = frame_buffer_b;
 #else
-    frame_buffer_display = (uint8_t*)malloc(frame_width * frame_height * frame_bytes_per_pixel);
-    frame_buffer_back = (uint8_t*)malloc(frame_width * frame_height * frame_bytes_per_pixel);
+        frame_buffer_display = (uint8_t*)malloc(frame_width * frame_height * frame_bytes_per_pixel);
+        frame_buffer_back = (uint8_t*)malloc(frame_width * frame_height * frame_bytes_per_pixel);
 #endif
-    memset(frame_buffer_display, 0, frame_width * frame_height * frame_bytes_per_pixel);
-    memset(frame_buffer_back, 0, frame_width * frame_height * frame_bytes_per_pixel);
+        memset(frame_buffer_display, 0, frame_width * frame_height * frame_bytes_per_pixel);
+        memset(frame_buffer_back, 0, frame_width * frame_height * frame_bytes_per_pixel);
+    }
+    else if (layout == MEM_DOUBLE_APS6404 || layout == MEM_COMBINED_APS6404) {
+        // TODO, these should share a PIO - and clock speed is fixed so can simplify
+        psram_display = new APS6404(0, 2, pio0);
+        psram_display->init();
+        psram_back = new APS6404(6, 8, pio1);
+        psram_back->init();
+    } else if (layout == MEM_SINGLE_APS6408) {
+        psram8 = new APS6408(8, 0, 10, 11);
+        psram8->init();
+    }
 
     memset(palette, 0, PALETTE_SIZE * sizeof(palette[0]));
 
-    frame_buffer_display = frame_buffer_display;
     dvhstx_debug("Frame buffers inited\n");
 
     const bool is_text_mode = (mode == MODE_TEXT_MONO || mode == MODE_TEXT_RGB111);
@@ -935,7 +1043,7 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_, Pinout pinout)
     for (int i = 12; i <= 19; ++i) {
         gpio_set_function(i, GPIO_FUNC_HSTX);
         gpio_set_drive_strength(i, GPIO_DRIVE_STRENGTH_4MA);
-        if (timing_mode->bit_clk_khz > 900000) {
+        if (timing_mode->bit_clk_khz > 1000000) {
             gpio_set_slew_rate(i, GPIO_SLEW_RATE_FAST);
         }
     }
@@ -993,15 +1101,28 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_, Pinout pinout)
     else irq_set_exclusive_handler(DMA_IRQ_2, dma_irq_handler);
     irq_set_enabled(DMA_IRQ_2, true);
 
-    dma_channel_start(0);
-
-    dvhstx_debug("DVHSTX started\n");
-
-    for (int i = 0; i < frame_height; ++i) {
-        memset(&frame_buffer_display[i * frame_width * frame_bytes_per_pixel], i, frame_width * frame_bytes_per_pixel);
+    if (frame_buffer_display) {
+        for (int i = 0; i < frame_height; ++i) {
+            memset(&frame_buffer_display[i * frame_width * frame_bytes_per_pixel], i, frame_width * frame_bytes_per_pixel);
+        }
+    }
+    else if (psram_display) {
+        for (int i = 0; i < frame_height; ++i) {
+            psram_display->write_repeat(i * frame_width * frame_bytes_per_pixel, i, frame_width * frame_bytes_per_pixel);
+            psram_back->write_repeat(i * frame_width * frame_bytes_per_pixel, i, frame_width * frame_bytes_per_pixel);
+        }
+    }
+    else if (psram8) {
+        for (int i = 0; i < frame_height; ++i) {
+            psram8->write_repeat(i * frame_width * frame_bytes_per_pixel, i, frame_width * frame_bytes_per_pixel);
+        }
     }
 
     dvhstx_debug("Frame buffer filled\n");
+
+    dma_channel_start(0);
+
+    dvhstx_debug("DVHSTX started\n");
 
     inited = true;
     return true;
@@ -1032,12 +1153,13 @@ void DVHSTX::reset() {
 }
 
 void DVHSTX::flip_blocking() {
-    wait_for_vsync();
-    flip_now();
+    flip_async();
+    wait_for_flip();
 }
 
 void DVHSTX::flip_now() {
-    std::swap(frame_buffer_display, frame_buffer_back);
+    if (layout == MEM_DOUBLE_BUFFER) std::swap(frame_buffer_display, frame_buffer_back);
+    else if (layout == MEM_DOUBLE_APS6404) std::swap(psram_display, psram_back);
 }
 
 void DVHSTX::wait_for_vsync() {

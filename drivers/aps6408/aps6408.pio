@@ -1,0 +1,71 @@
+; Pins:
+; - SCK is side-set 0
+; - CSn is side-set 1
+; - D0 is IN/OUT/SET pin 0
+;
+; DMA is 32 bit.  Stream takes form:
+; 16 bits For read: length of read in bytes/2, plus 8
+;         For write: length of write in bytes/2, minus 1
+;         Original data length in bits must be a multiple of 32
+; 8 bits 0xff
+; 8 bits AP6408 cmd (read: 0x20, write: 0xa0, write reg: 0xc0)
+; 32 bits address
+; 32 bits jmp label for do_read/do_write
+; For write, data
+; For write, jmp label for top
+
+; Write/command SM
+; ISR must be preloaded with 0xFF
+.program aps6408_command
+.side_set 2
+.wrap_target
+top:
+  set x, 1          side 0b10
+  out y, 16         side 0b10
+  out pindirs, 8    side 0b10
+
+; Write command, followed by address
+  out pins, 8       side 0b00
+  nop               side 0b01 [1]
+  jmp addr_lp       side 0b00
+PUBLIC do_reg_write:
+  mov x, y          side 0b00
+addr_lp: 
+  out pins, 8       side 0b00
+  nop               side 0b01
+  out pins, 8       side 0b01
+  jmp x--, addr_lp  side 0b00
+  out pc, 32        side 0b00
+
+PUBLIC do_write:
+  set x, 0          side 0b01 [1] ; Dummy cycles
+dummy_lp:
+  nop               side 0b00 [1]
+  jmp x--, dummy_lp side 0b01 [1]
+  nop               side 0b00
+write_lp: 
+  out pins, 8       side 0b00
+  nop               side 0b01
+  out pins, 8       side 0b01
+  jmp y--, write_lp side 0b00
+.wrap
+
+; Read command
+PUBLIC do_read:
+  irq clear 4       side 0b01
+read_lp:
+  jmp !y top        side 0b00
+  jmp y--, read_lp  side 0b01
+  
+; Read SM
+.program aps6408_read
+top:
+  set x, 19
+  irq wait 4
+  mov osr, null
+  out pindirs, 8
+wait_lp:
+  jmp x--, wait_lp  
+.wrap_target
+  in pins, 8
+.wrap

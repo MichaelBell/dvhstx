@@ -7,6 +7,8 @@
 #include "common/pimoroni_common.hpp"
 #include "common/pimoroni_i2c.hpp"
 #include "libraries/pico_graphics/pico_graphics.hpp"
+#include "drivers/aps6404/aps6404.hpp"
+#include "drivers/aps6408/aps6408.hpp"
 
 // DVI HSTX driver for use with Pimoroni PicoGraphics
 
@@ -39,6 +41,13 @@ namespace pimoroni {
       MODE_RGB888 = 3,
       MODE_TEXT_MONO = 4,
       MODE_TEXT_RGB111 = 5,
+    };
+
+    enum MemoryLayout {
+      MEM_DOUBLE_BUFFER = 1,    // Double buffer in internal RAM
+      MEM_DOUBLE_APS6404 = 2,   // Double buffer, one in each of two APS6404 PSRAMs
+      MEM_COMBINED_APS6404 = 3, // Single buffer, in two APS6404 PSRAMs, row interleaved
+      MEM_SINGLE_APS6408 = 4    // Single buffer, in one APS6408 PSRAM
     };
 
     enum TextColour {
@@ -96,7 +105,7 @@ namespace pimoroni {
 
       void clear();
 
-      bool init(uint16_t width, uint16_t height, Mode mode = MODE_RGB565, Pinout pinout = {13, 15, 17, 19});
+      bool init(uint16_t width, uint16_t height, Mode mode = MODE_RGB565, Pinout pinout = {13, 15, 17, 19}, MemoryLayout layout = MEM_DOUBLE_BUFFER);
       void reset();
 
       // Wait for vsync and then flip the buffers
@@ -104,6 +113,8 @@ namespace pimoroni {
 
       // Flip immediately without waiting for vsync
       void flip_now();
+
+      void set_blank(bool blank_) { blank = blank_; }
 
       void wait_for_vsync();
 
@@ -119,9 +130,25 @@ namespace pimoroni {
     private:
       RGB888 palette[PALETTE_SIZE];
 
-      uint8_t* frame_buffer_display;
-      uint8_t* frame_buffer_back;
+      MemoryLayout layout;
+
+      uint8_t* frame_buffer_display = nullptr;
+      uint8_t* frame_buffer_back = nullptr;
+
+      APS6404* psram_display = nullptr;
+      APS6404* psram_back = nullptr;
+
+      APS6408* psram8 = nullptr;
+
       uint32_t* font_cache = nullptr;
+
+      uint32_t point_to_addr16(const Point &p) const {
+        return 2 * ((p.y * (uint32_t)frame_width) + p.x);
+      }
+
+      uint32_t point_to_addr_palette(const Point &p) const {
+        return ((p.y * (uint32_t)frame_width) + p.x);
+      }
 
       uint16_t* point_to_ptr16(const Point &p) const {
         return ((uint16_t*)frame_buffer_back) + (p.y * (uint32_t)frame_width) + p.x;
@@ -147,6 +174,7 @@ namespace pimoroni {
       volatile bool flip_next;
 
       bool inited = false;
+      volatile bool blank = false;
 
       uint32_t* line_buffers;
       const struct dvi_timing* timing_mode;
