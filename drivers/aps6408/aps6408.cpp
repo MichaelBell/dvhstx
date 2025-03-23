@@ -234,7 +234,6 @@ namespace pimoroni {
             uint32_t len = std::min((0x400 - (addr & 0x3FF)) >> 2, len_in_words);
 
             read_raw(addr, read_buf, len);
-            dma_channel_wait_for_finish_blocking(read_dma_channel);
             len_in_words -= len;
             addr += len << 2;
             read_buf += len;
@@ -252,14 +251,14 @@ namespace pimoroni {
     }
 
     void __no_inline_not_in_flash_func(APS6408::read_raw)(uint32_t addr, uint32_t* read_buf, uint32_t len_in_words) {
+        dma_channel_wait_for_finish_blocking(read_dma_channel);
         dma_channel_wait_for_finish_blocking(write_dma_channel);
+        while (dma_hw->intr & (1 << read_dma_channel));
 
         pio_sm_put_blocking(pio, pio_command_sm, ((len_in_words << 1) + 8) | 0x20ff0000);
         pio_sm_put_blocking(pio, pio_command_sm, __bswap32(addr));
         pio_sm_put_blocking(pio, pio_command_sm, pio_command_read);
 
-        dma_channel_wait_for_finish_blocking(read_dma_channel);
-        
         dma_channel_transfer_to_buffer_now(read_dma_channel, read_buf, len_in_words);
     }
 }

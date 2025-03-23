@@ -86,8 +86,14 @@ namespace pimoroni {
       // 16bpp interface
       void write_pixel(const Point &p, uint16_t colour);
       void write_pixel_span(const Point &p, uint l, uint16_t colour);
-      void write_pixel_span(const Point &p, uint l, uint16_t *data);
+      void write_pixel_span(const Point &p, uint l, const uint16_t *data);
       void read_pixel_span(const Point &p, uint l, uint16_t *data);
+
+      // 32bpp interface
+      void write_pixel32(const Point &p, uint32_t colour);
+      void write_pixel32_span(const Point &p, uint l, uint32_t colour);
+      void write_pixel32_span(const Point &p, uint l, const uint32_t *data);
+      void read_pixel32_span(const Point &p, uint l, uint32_t *data);
 
       // 256 colour palette mode.
       void set_palette(RGB888 new_palette[PALETTE_SIZE]);
@@ -96,7 +102,7 @@ namespace pimoroni {
 
       void write_palette_pixel(const Point &p, uint8_t colour);
       void write_palette_pixel_span(const Point &p, uint l, uint8_t colour);
-      void write_palette_pixel_span(const Point &p, uint l, uint8_t* data);
+      void write_palette_pixel_span(const Point &p, uint l, const uint8_t* data);
       void read_palette_pixel_span(const Point &p, uint l, uint8_t *data);
 
       // Text mode (91 x 30)
@@ -144,6 +150,10 @@ namespace pimoroni {
 
       uint32_t point_to_addr16(const Point &p) const {
         return 2 * ((p.y * (uint32_t)frame_width) + p.x);
+      }
+
+      uint32_t point_to_addr32(const Point &p) const {
+        return 4 * ((p.y * (uint32_t)frame_width) + p.x);
       }
 
       uint32_t point_to_addr_palette(const Point &p) const {

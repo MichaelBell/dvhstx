@@ -248,6 +248,9 @@ void __no_inline_not_in_flash_func(DVHSTX::gfx_dma_handler)() {
                     psram_back->wait_for_finish_blocking();
                 }
             }
+            if (psram8) {
+                psram8->wait_for_read_blocking();
+            }
             flip_next = false;
             display->flip_now();
         }
@@ -596,7 +599,7 @@ void DVHSTX::write_pixel_span(const Point &p, uint l, uint16_t colour)
     }
     else if (psram8) {
         uint32_t data = colour | (colour << 16);
-        psram8->write_repeat(point_to_addr16(p), data, l << 1);
+        psram8->write_repeat(point_to_addr16(p), data, l >> 1);
     }
     else {
         uint16_t* ptr = point_to_ptr16(p);
@@ -604,7 +607,7 @@ void DVHSTX::write_pixel_span(const Point &p, uint l, uint16_t colour)
     }
 }
 
-void DVHSTX::write_pixel_span(const Point &p, uint l, uint16_t *data)
+void DVHSTX::write_pixel_span(const Point &p, uint l, const uint16_t *data)
 {
     if (psram_back) {
         if (layout == MEM_DOUBLE_APS6404) {
@@ -649,6 +652,72 @@ void DVHSTX::read_pixel_span(const Point &p, uint l, uint16_t *data)
     }
 }
 
+void DVHSTX::write_pixel32(const Point &p, uint32_t colour)
+{
+    if (psram_back) {
+        if (layout == MEM_DOUBLE_APS6404) {
+            psram_back->write(point_to_addr32(p), &colour, 4);
+            psram_back->wait_for_finish_blocking();
+        } else if (layout == MEM_COMBINED_APS6404) {
+            APS6404* psram = (p.y & 1) ? psram_back : psram_display;
+            Point mp(p.x, p.y >> 1);
+            psram->write(point_to_addr32(mp), &colour, 4);
+            psram->wait_for_finish_blocking();
+        }
+    }
+    else if (psram8) {
+        psram8->write_blocking(point_to_addr32(p), &colour, 1);
+    }
+}
+
+void DVHSTX::write_pixel32_span(const Point &p, uint l, uint32_t colour)
+{
+    if (psram_back) {
+        if (layout == MEM_DOUBLE_APS6404) {
+            psram_back->write_repeat(point_to_addr32(p), colour, l << 2);
+        } else if (layout == MEM_COMBINED_APS6404) {
+            APS6404* psram = (p.y & 1) ? psram_back : psram_display;
+            Point mp(p.x, p.y >> 1);
+            psram->write_repeat(point_to_addr32(mp), colour, l << 2);
+        }
+    }
+    else if (psram8) {
+        psram8->write_repeat(point_to_addr32(p), colour, l);
+    }
+}
+
+void DVHSTX::write_pixel32_span(const Point &p, uint l, const uint32_t *data)
+{
+    if (psram_back) {
+        if (layout == MEM_DOUBLE_APS6404) {
+            psram_back->write_blocking(point_to_addr32(p), data, l << 2);
+        } else if (layout == MEM_COMBINED_APS6404) {
+            APS6404* psram = (p.y & 1) ? psram_back : psram_display;
+            Point mp(p.x, p.y >> 1);
+            psram->write_blocking(point_to_addr32(mp), data, l << 2);
+        }
+    }
+    else if (psram8) {
+        psram8->write_blocking(point_to_addr32(p), data, l);
+    }
+}
+
+void DVHSTX::read_pixel32_span(const Point &p, uint l, uint32_t *data)
+{
+    if (psram_back) {
+        if (layout == MEM_DOUBLE_APS6404) {
+            psram_back->read_blocking(point_to_addr32(p), data, l);
+        } else if (layout == MEM_COMBINED_APS6404) {
+            APS6404* psram = (p.y & 1) ? psram_back : psram_display;
+            Point mp(p.x, p.y >> 1);
+            psram->read_blocking(point_to_addr32(mp), data, l);
+        }
+    }
+    else if (psram8) {
+        psram_back->read_blocking(point_to_addr32(p), data, l);
+    }
+}
+
 void DVHSTX::set_palette(RGB888 new_palette[PALETTE_SIZE])
 {
     memcpy(palette, new_palette, PALETTE_SIZE * sizeof(RGB888));
@@ -675,7 +744,7 @@ void DVHSTX::write_palette_pixel_span(const Point &p, uint l, uint8_t colour)
     memset(ptr, colour, l);
 }
 
-void DVHSTX::write_palette_pixel_span(const Point &p, uint l, uint8_t* data)
+void DVHSTX::write_palette_pixel_span(const Point &p, uint l, const uint8_t* data)
 {
     uint8_t* ptr = point_to_ptr_palette(p);
     memcpy(ptr, data, l);
@@ -945,6 +1014,7 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_, Pinout pinout, Me
         break;
 
     case MODE_PALETTE:
+    case MODE_RGB888:
         // Configure HSTX's TMDS encoder for RGB888
         hstx_ctrl_hw->expand_tmds =
             7  << HSTX_CTRL_EXPAND_TMDS_L2_NBITS_LSB |

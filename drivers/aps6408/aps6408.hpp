@@ -48,6 +48,10 @@ namespace pimoroni {
                 dma_channel_wait_for_finish_blocking(read_dma_channel);
             }
 
+            void wait_for_read_blocking() {
+                dma_channel_wait_for_finish_blocking(read_dma_channel);
+            }
+
         private:
             void setup_dma_config();
 

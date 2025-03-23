@@ -37,6 +37,20 @@ pico_enable_stdio_usb(show_image 1)
 # create map/bin/hex file etc.
 pico_add_extra_outputs(show_image)
 
+add_executable(
+  show_png
+  show_png.cpp
+)
+
+include(libraries/pngdec/pngdec)
+
+# Pull in pico libraries that we need
+target_link_libraries(show_png pico_stdlib pico_multicore pico_dvhstx pngdec hardware_adc)
+pico_enable_stdio_usb(show_png 1)
+
+# create map/bin/hex file etc.
+pico_add_extra_outputs(show_png)
+
 
 add_executable(
   textmode
