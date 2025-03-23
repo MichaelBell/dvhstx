@@ -714,7 +714,7 @@ void DVHSTX::read_pixel32_span(const Point &p, uint l, uint32_t *data)
         }
     }
     else if (psram8) {
-        psram_back->read_blocking(point_to_addr32(p), data, l);
+        psram8->read_blocking(point_to_addr32(p), data, l);
     }
 }
 

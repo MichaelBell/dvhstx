@@ -244,7 +244,7 @@ namespace pimoroni {
         dma_channel_wait_for_finish_blocking(write_dma_channel);
 
         pio_sm_put_blocking(pio, pio_command_sm, ((len_in_words << 1) - 1) | 0xa0ff0000);
-        pio_sm_put_blocking(pio, pio_command_sm, __bswap32(addr));
+        pio_sm_put_blocking(pio, pio_command_sm, __builtin_bswap32(addr));
         pio_sm_put_blocking(pio, pio_command_sm, pio_command_write);
 
         dma_channel_transfer_from_buffer_now(write_dma_channel, data, len_in_words);
@@ -256,7 +256,7 @@ namespace pimoroni {
         while (dma_hw->intr & (1 << read_dma_channel));
 
         pio_sm_put_blocking(pio, pio_command_sm, ((len_in_words << 1) + 8) | 0x20ff0000);
-        pio_sm_put_blocking(pio, pio_command_sm, __bswap32(addr));
+        pio_sm_put_blocking(pio, pio_command_sm, __builtin_bswap32(addr));
         pio_sm_put_blocking(pio, pio_command_sm, pio_command_read);
 
         dma_channel_transfer_to_buffer_now(read_dma_channel, read_buf, len_in_words);
