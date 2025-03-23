@@ -148,6 +148,10 @@ namespace pimoroni {
 
       uint32_t* font_cache = nullptr;
 
+      uint32_t point_to_addr8(const Point &p) const {
+        return (p.y * (uint32_t)frame_width) + p.x;
+      }
+
       uint32_t point_to_addr16(const Point &p) const {
         return 2 * ((p.y * (uint32_t)frame_width) + p.x);
       }

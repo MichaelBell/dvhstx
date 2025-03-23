@@ -172,7 +172,39 @@ void __no_inline_not_in_flash_func(DVHSTX::gfx_dma_handler)() {
             }
             else if (psram_display) {
                 if (layout == MEM_DOUBLE_APS6404) {
-                    psram_display->read(y * line_len, dst_ptr, line_len >> 2);
+                    if (mode != MODE_PALETTE) {
+                        psram_display->read(y * line_len, dst_ptr, line_len >> 2);
+                    }
+                    else {
+                        uint32_t* src_ptr32 = dst_ptr + 3 * (line_len >> 4);
+                        psram_display->read(y * line_len >> 2, src_ptr32, line_len >> 4);
+
+                        // The loop below is slower than the PSRAM read, so just need to make sure that has started.
+                        while ((uintptr_t)psram_display->get_current_read_ptr() <= (uintptr_t)src_ptr32 + 16);
+                        for (int i = 0; i < timing_mode->h_active_pixels; i+=16) {
+                            // Yes the manual unroll does seem to be required!
+                            uint32_t palette_values = *src_ptr32++;
+                            *dst_ptr++ = display_palette[palette_values & 0xff];
+                            *dst_ptr++ = display_palette[(palette_values >> 8) & 0xff];
+                            *dst_ptr++ = display_palette[(palette_values >> 16) & 0xff];
+                            *dst_ptr++ = display_palette[palette_values >> 24];
+                            palette_values = *src_ptr32++;
+                            *dst_ptr++ = display_palette[palette_values & 0xff];
+                            *dst_ptr++ = display_palette[(palette_values >> 8) & 0xff];
+                            *dst_ptr++ = display_palette[(palette_values >> 16) & 0xff];
+                            *dst_ptr++ = display_palette[palette_values >> 24];
+                            palette_values = *src_ptr32++;
+                            *dst_ptr++ = display_palette[palette_values & 0xff];
+                            *dst_ptr++ = display_palette[(palette_values >> 8) & 0xff];
+                            *dst_ptr++ = display_palette[(palette_values >> 16) & 0xff];
+                            *dst_ptr++ = display_palette[palette_values >> 24];
+                            palette_values = *src_ptr32++;
+                            *dst_ptr++ = display_palette[palette_values & 0xff];
+                            *dst_ptr++ = display_palette[(palette_values >> 8) & 0xff];
+                            *dst_ptr++ = display_palette[(palette_values >> 16) & 0xff];
+                            *dst_ptr++ = display_palette[palette_values >> 24];
+                        }
+                    }
                 }
                 else {
                     APS6404* psram = (y & 1) ? psram_back : psram_display;
@@ -736,19 +768,50 @@ RGB888* DVHSTX::get_palette()
 
 void DVHSTX::write_palette_pixel(const Point &p, uint8_t colour)
 {
-    *point_to_ptr_palette(p) = colour;
+    if (psram_back) {
+        uint32_t data = colour;
+        psram_back->write(point_to_addr8(p), &data, 1);
+        psram_back->wait_for_finish_blocking();
+    }
+    else {
+        *point_to_ptr_palette(p) = colour;
+    }
 }
 
 void DVHSTX::write_palette_pixel_span(const Point &p, uint l, uint8_t colour)
 {
-    uint8_t* ptr = point_to_ptr_palette(p);
-    memset(ptr, colour, l);
+    if (psram_back) {
+        uint32_t data = colour * 0x1010101;
+        psram_back->write_repeat(point_to_addr8(p), data, l);
+    } else {
+        uint8_t* ptr = point_to_ptr_palette(p);
+        memset(ptr, colour, l);
+    }
 }
 
 void DVHSTX::write_palette_pixel_span(const Point &p, uint l, const uint8_t* data)
 {
-    uint8_t* ptr = point_to_ptr_palette(p);
-    memcpy(ptr, data, l);
+    if (psram_back) {
+        Point mp(p);
+        if ((uintptr_t)data & 3) {
+            uint32_t tmp;
+            uint tmp_len = 0;
+            while (((uintptr_t)data & 3) && tmp_len < l) {
+                tmp <<= 8;
+                tmp |= *data++;
+                ++tmp_len;
+            }
+            psram_back->write_blocking(point_to_addr8(p), &tmp, tmp_len);
+            l -= tmp_len;
+            mp.x += tmp_len;
+        }
+        if (l) {
+            psram_back->write_blocking(point_to_addr8(p), (uint32_t*)data, l);
+        }
+    } else {
+        uint8_t* ptr = point_to_ptr_palette(p);
+        memcpy(ptr, data, l);
+    }
 }
 
 void DVHSTX::read_palette_pixel_span(const Point &p, uint l, uint8_t *data)
@@ -860,7 +923,7 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_, Pinout pinout, Me
         }
         else if (full_width == 1920) {
             if (full_height == 1080) {
-                if (mode == MODE_RGB888) timing_mode = &dvi_timing_1920x1080i_50hz;
+                if (mode == MODE_RGB888 || layout == MEM_DOUBLE_APS6404) timing_mode = &dvi_timing_1920x1080i_50hz;
                 else timing_mode = &dvi_timing_1920x1080i_60hz;
             }
         }

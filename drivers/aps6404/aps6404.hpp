@@ -46,6 +46,11 @@ namespace pimoroni {
                 wait_for_finish_blocking();
             }
 
+            // While a read is running, get the next address that will be filled.
+            uint32_t* get_current_read_ptr() {
+                return (uint32_t*)(dma_hw->ch[dma_channel].write_addr);
+            }
+
             // Block until any outstanding read or write completes
             void wait_for_finish_blocking() {
                 dma_channel_wait_for_finish_blocking(dma_channel);

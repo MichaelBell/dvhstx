@@ -6,8 +6,10 @@
 
 using namespace pimoroni;
 
-#define FRAME_WIDTH 800
-#define FRAME_HEIGHT 600
+#define FRAME_WIDTH 1920
+#define FRAME_HEIGHT 1080
+
+#define USE_PALETTE 1
 
 static DVHSTX display;
 
@@ -22,11 +24,11 @@ void setup_pen(PicoGraphicsDVHSTX* graphics, DVHSTX::Mode mode) {
   graphics->create_pen(0xFF, 0xFF, 0xFF);
 
   if (mode == DVHSTX::MODE_PALETTE) {
-    for (int i = 0; i < 25; ++i) {
-      graphics->create_pen_hsv(i * 0.04f, 1.0f, 1.0f);
+    for (int i = 0; i < 50; ++i) {
+      graphics->create_pen_hsv(i * 0.02f, 1.0f, 1.0f);
     }
-    for (int i = 0; i < 5; ++i) {
-      graphics->create_pen((i+3) * (255/8), 255, 255);
+    for (int i = 0; i <= 64; ++i) {
+      graphics->create_pen((i * 255)/64, 255, 255);
     }
   }
 
@@ -37,7 +39,7 @@ void setup_pen(PicoGraphicsDVHSTX* graphics, DVHSTX::Mode mode) {
     circles[i].x = rand() % graphics->bounds.w;
     circles[i].y = rand() % graphics->bounds.h;
     if (mode == DVHSTX::MODE_PALETTE) {
-      circles[i].pen = 2 + (i >> 1);
+      circles[i].pen = 2 + i;
     } else {
       circles[i].pen = graphics->create_pen_hsv(i * 0.02f, 1.0f, 1.0f);
     }
