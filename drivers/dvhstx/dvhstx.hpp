@@ -181,6 +181,7 @@ namespace pimoroni {
       int line_num = -1;
 
       volatile int v_scanline = 2;
+      volatile int field = 0;
       volatile bool flip_next;
 
       bool inited = false;

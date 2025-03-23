@@ -78,25 +78,10 @@ static inline __attribute__((always_inline)) uint32_t render_char_line(int c, in
 // Lists are padded with NOPs to be >= HSTX FIFO size, to avoid DMA rapidly
 // pingponging and tripping up the IRQs.
 
-static const uint32_t vblank_line_vsync_off_src[] = {
-    HSTX_CMD_RAW_REPEAT,
-    SYNC_V1_H1,
-    HSTX_CMD_RAW_REPEAT,
-    SYNC_V1_H0,
-    HSTX_CMD_RAW_REPEAT,
-    SYNC_V1_H1
-};
-static uint32_t vblank_line_vsync_off[count_of(vblank_line_vsync_off_src)];
-
-static const uint32_t vblank_line_vsync_on_src[] = {
-    HSTX_CMD_RAW_REPEAT,
-    SYNC_V0_H1,
-    HSTX_CMD_RAW_REPEAT,
-    SYNC_V0_H0,
-    HSTX_CMD_RAW_REPEAT,
-    SYNC_V0_H1
-};
-static uint32_t vblank_line_vsync_on[count_of(vblank_line_vsync_on_src)];
+static uint32_t vblank_line_vsync_off[6];
+static uint32_t vblank_line_vsync_on[6];
+static uint32_t vblank_line_vsync_half_on[8];
+static uint32_t vblank_line_vsync_half_off[8];
 
 static const uint32_t vactive_line_header_src[] = {
     HSTX_CMD_RAW_REPEAT,
@@ -147,13 +132,28 @@ void __no_inline_not_in_flash_func(DVHSTX::gfx_dma_handler)() {
     if (++ch_num == NUM_CHANS) ch_num = 0;
 
     if (v_scanline >= timing_mode->v_front_porch && v_scanline < (timing_mode->v_front_porch + timing_mode->v_sync_width)) {
-        ch->read_addr = (uintptr_t)vblank_line_vsync_on;
-        ch->transfer_count = count_of(vblank_line_vsync_on);
+        if (field == 1 && v_scanline == timing_mode->v_front_porch) {
+            ch->read_addr = (uintptr_t)vblank_line_vsync_half_on;
+            ch->transfer_count = count_of(vblank_line_vsync_half_on);
+            field = 3;
+        } else {
+            ch->read_addr = (uintptr_t)vblank_line_vsync_on;
+            ch->transfer_count = count_of(vblank_line_vsync_on);
+        }
     } else if (v_scanline < v_inactive_total) {
+        if (field == 3 && v_scanline == timing_mode->v_front_porch + timing_mode->v_sync_width) {
+            ch->read_addr = (uintptr_t)vblank_line_vsync_half_on;
+            ch->transfer_count = count_of(vblank_line_vsync_half_on);
+            --v_scanline;
+            field = 1;
+        }
         ch->read_addr = (uintptr_t)vblank_line_vsync_off;
         ch->transfer_count = count_of(vblank_line_vsync_off);
     } else {
-        const int y = (v_scanline - v_inactive_total) >> v_repeat_shift;
+        int y = (v_scanline - v_inactive_total) >> v_repeat_shift;
+        if (timing_mode->interlaced) {
+            y = (y << 1) + field;
+        }
         const int new_line_num = (v_repeat_shift == 0) ? ch_num : (y & (NUM_FRAME_LINES - 1));
         const int line_len = timing_mode->h_active_pixels * line_bytes_per_pixel;
         const uint line_buf_total_len = (line_len >> 2) + count_of(vactive_line_header);
@@ -546,12 +546,13 @@ void DVHSTX::display_setup_clock() {
 
     if (timing_mode->bit_clk_khz > 600000) {
         vreg_set_voltage(VREG_VOLTAGE_1_25);
-    } else if (timing_mode->bit_clk_khz > 800000) {
-        // YOLO mode
-        hw_set_bits(&powman_hw->vreg_ctrl, POWMAN_PASSWORD_BITS | POWMAN_VREG_CTRL_DISABLE_VOLTAGE_LIMIT_BITS);
-        vreg_set_voltage(VREG_VOLTAGE_1_40);
+    } 
+    if (timing_mode->bit_clk_khz > 800000) {
+        vreg_set_voltage(VREG_VOLTAGE_1_30);
         if (timing_mode->bit_clk_khz > 1000000) {
-            vreg_set_voltage(VREG_VOLTAGE_1_50);
+            // YOLO mode
+            hw_set_bits(&powman_hw->vreg_ctrl, POWMAN_PASSWORD_BITS | POWMAN_VREG_CTRL_DISABLE_VOLTAGE_LIMIT_BITS);
+            vreg_set_voltage(VREG_VOLTAGE_1_40);
         }
         sleep_ms(1);
     }
@@ -858,11 +859,18 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_, Pinout pinout, Me
             if (full_height == 720) timing_mode = &dvi_timing_1280x720p_rb_50hz;
         }
         else if (full_width == 1920) {
-            if (full_height == 1080) timing_mode = &dvi_timing_1920x1080p_rb2_30hz;
+            if (full_height == 1080) {
+                if (mode == MODE_RGB888) timing_mode = &dvi_timing_1920x1080i_50hz;
+                else timing_mode = &dvi_timing_1920x1080i_60hz;
+            }
         }
         else if (full_width == 2560) {
             if (full_height == 1440) timing_mode = &dvi_timing_2560x1440p_yolo_24hz;
         }
+    }
+
+    if (get_core_num() == 1) {
+        hw_set_bits(&bus_ctrl_hw->priority, (BUSCTRL_BUS_PRIORITY_PROC1_BITS | BUSCTRL_BUS_PRIORITY_DMA_R_BITS | BUSCTRL_BUS_PRIORITY_DMA_W_BITS));
     }
 
     if (!timing_mode) {
@@ -886,26 +894,63 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_, Pinout pinout, Me
     v_repeat = 1 << v_repeat_shift;
     h_repeat = 1 << h_repeat_shift;
 
-    memcpy(vblank_line_vsync_off, vblank_line_vsync_off_src, sizeof(vblank_line_vsync_off_src));
-    vblank_line_vsync_off[0] |= timing_mode->h_front_porch;
-    vblank_line_vsync_off[2] |= timing_mode->h_sync_width;
-    vblank_line_vsync_off[4] |= timing_mode->h_back_porch + timing_mode->h_active_pixels;
+    uint32_t sync_v0_h0 = timing_mode->h_sync_polarity ? (timing_mode->v_sync_polarity ? SYNC_V0_H0 : SYNC_V1_H0) :
+                                                         (timing_mode->v_sync_polarity ? SYNC_V0_H1 : SYNC_V1_H1);
+    uint32_t sync_v0_h1 = timing_mode->h_sync_polarity ? (timing_mode->v_sync_polarity ? SYNC_V0_H1 : SYNC_V1_H1) :
+                                                         (timing_mode->v_sync_polarity ? SYNC_V0_H0 : SYNC_V1_H0);
+    uint32_t sync_v1_h0 = timing_mode->h_sync_polarity ? (timing_mode->v_sync_polarity ? SYNC_V1_H0 : SYNC_V0_H0) :
+                                                         (timing_mode->v_sync_polarity ? SYNC_V1_H1 : SYNC_V0_H1);
+    uint32_t sync_v1_h1 = timing_mode->h_sync_polarity ? (timing_mode->v_sync_polarity ? SYNC_V1_H1 : SYNC_V0_H1) :
+                                                         (timing_mode->v_sync_polarity ? SYNC_V1_H0 : SYNC_V0_H0);
 
-    memcpy(vblank_line_vsync_on, vblank_line_vsync_on_src, sizeof(vblank_line_vsync_on_src));
-    vblank_line_vsync_on[0] |= timing_mode->h_front_porch;
-    vblank_line_vsync_on[2] |= timing_mode->h_sync_width;
-    vblank_line_vsync_on[4] |= timing_mode->h_back_porch + timing_mode->h_active_pixels;
+    vblank_line_vsync_off[0] = HSTX_CMD_RAW_REPEAT | timing_mode->h_front_porch;
+    vblank_line_vsync_off[1] = sync_v0_h0;
+    vblank_line_vsync_off[2] = HSTX_CMD_RAW_REPEAT | timing_mode->h_sync_width;
+    vblank_line_vsync_off[3] = sync_v0_h1;
+    vblank_line_vsync_off[4] = HSTX_CMD_RAW_REPEAT | (timing_mode->h_back_porch + timing_mode->h_active_pixels);
+    vblank_line_vsync_off[5] = sync_v0_h0;
+
+    vblank_line_vsync_on[0] = HSTX_CMD_RAW_REPEAT | timing_mode->h_front_porch;
+    vblank_line_vsync_on[1] = sync_v1_h0;
+    vblank_line_vsync_on[2] = HSTX_CMD_RAW_REPEAT | timing_mode->h_sync_width;
+    vblank_line_vsync_on[3] = sync_v1_h1;
+    vblank_line_vsync_on[4] = HSTX_CMD_RAW_REPEAT | (timing_mode->h_back_porch + timing_mode->h_active_pixels);
+    vblank_line_vsync_on[5] = sync_v1_h0;
+
+    vblank_line_vsync_half_on[0] = HSTX_CMD_RAW_REPEAT | timing_mode->h_front_porch;
+    vblank_line_vsync_half_on[1] = sync_v0_h0;
+    vblank_line_vsync_half_on[2] = HSTX_CMD_RAW_REPEAT | timing_mode->h_sync_width;
+    vblank_line_vsync_half_on[3] = sync_v0_h1;
+    vblank_line_vsync_half_on[4] = HSTX_CMD_RAW_REPEAT | (timing_mode->h_back_porch + timing_mode->h_active_pixels - (timing_mode->h_front_porch + timing_mode->h_sync_width + timing_mode->h_back_porch + timing_mode->h_active_pixels) / 2);
+    vblank_line_vsync_half_on[5] = sync_v0_h0;
+    vblank_line_vsync_half_on[6] = HSTX_CMD_RAW_REPEAT | ((timing_mode->h_front_porch + timing_mode->h_sync_width + timing_mode->h_back_porch + timing_mode->h_active_pixels) / 2);
+    vblank_line_vsync_half_on[7] = sync_v1_h0;
+
+    vblank_line_vsync_half_off[0] = HSTX_CMD_RAW_REPEAT | timing_mode->h_front_porch;
+    vblank_line_vsync_half_off[1] = sync_v1_h0;
+    vblank_line_vsync_half_off[2] = HSTX_CMD_RAW_REPEAT | timing_mode->h_sync_width;
+    vblank_line_vsync_half_off[3] = sync_v1_h1;
+    vblank_line_vsync_half_off[4] = HSTX_CMD_RAW_REPEAT | (timing_mode->h_back_porch + timing_mode->h_active_pixels - (timing_mode->h_front_porch + timing_mode->h_sync_width + timing_mode->h_back_porch + timing_mode->h_active_pixels) / 2);
+    vblank_line_vsync_half_off[5] = sync_v1_h0;
+    vblank_line_vsync_half_off[6] = HSTX_CMD_RAW_REPEAT | ((timing_mode->h_front_porch + timing_mode->h_sync_width + timing_mode->h_back_porch + timing_mode->h_active_pixels) / 2);
+    vblank_line_vsync_half_off[7] = sync_v0_h0;
 
     memcpy(vactive_line_header, vactive_line_header_src, sizeof(vactive_line_header_src));
     vactive_line_header[0] |= timing_mode->h_front_porch;
+    vactive_line_header[1] = sync_v0_h0;
     vactive_line_header[2] |= timing_mode->h_sync_width;
+    vactive_line_header[3] = sync_v0_h1;
     vactive_line_header[4] |= timing_mode->h_back_porch;
+    vactive_line_header[5] = sync_v0_h0;
     vactive_line_header[6] |= timing_mode->h_active_pixels;
 
     memcpy(vactive_text_line_header, vactive_text_line_header_src, sizeof(vactive_text_line_header_src));
     vactive_text_line_header[0] |= timing_mode->h_front_porch;
+    vactive_text_line_header[1] = sync_v0_h0;
     vactive_text_line_header[2] |= timing_mode->h_sync_width;
+    vactive_text_line_header[3] = sync_v0_h1;
     vactive_text_line_header[4] |= timing_mode->h_back_porch;
+    vactive_text_line_header[5] = sync_v0_h0;
     vactive_text_line_header[7+6] |= timing_mode->h_active_pixels - 6;
 
     switch (mode) {

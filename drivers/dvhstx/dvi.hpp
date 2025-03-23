@@ -43,6 +43,8 @@ struct dvi_timing {
 	int v_active_lines;
 
 	uint bit_clk_khz;
+
+	bool interlaced = false;
 };
 
 extern const struct dvi_timing dvi_timing_640x480p_60hz;
@@ -57,6 +59,9 @@ extern const struct dvi_timing dvi_timing_960x540p_50hz;
 extern const struct dvi_timing dvi_timing_1024x768_rb_60hz;
 extern const struct dvi_timing dvi_timing_1280x720p_rb_50hz;
 extern const struct dvi_timing dvi_timing_1280x720p_rb_60hz;
+extern const struct dvi_timing dvi_timing_1920x1080i_50hz;
+extern const struct dvi_timing dvi_timing_1920x1080i_60hz;
 extern const struct dvi_timing dvi_timing_1920x1080p_rb2_30hz;
+extern const struct dvi_timing dvi_timing_1920x1080p_30hz;
 extern const struct dvi_timing dvi_timing_1920x1080p_yolo_48hz;
 extern const struct dvi_timing dvi_timing_2560x1440p_yolo_24hz;

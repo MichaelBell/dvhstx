@@ -7,6 +7,7 @@
 
 using namespace pimoroni;
 
+#if 0
 #define FRAME_WIDTH 1280
 #define FRAME_HEIGHT 720
 
@@ -17,6 +18,17 @@ static uint8_t* png_data[] = {
 static int png_len[] = {
     1498121,
 };
+#else
+#define FRAME_WIDTH 1920
+#define FRAME_HEIGHT 1080
+
+static uint8_t* png_data[] = {
+    (uint8_t*)0x10080000,
+};
+static int png_len[] = {
+    3629086,
+};
+#endif
 
 static DVHSTX display;
 static PicoGraphics_PenDVHSTX_RGB565 graphics(FRAME_WIDTH, FRAME_HEIGHT, display);

@@ -228,7 +228,43 @@ const struct dvi_timing dvi_timing_1280x720p_rb_60hz = {
 	.bit_clk_khz       = 640000
 };
 
-// 1080p30 - not a normal mode but seems to work on a wide variety of hardware
+// 1080i50 - by the book
+const struct dvi_timing dvi_timing_1920x1080i_50hz = {
+	.h_sync_polarity   = true,
+	.h_front_porch     = 528,
+	.h_sync_width      = 44,
+	.h_back_porch      = 148,
+	.h_active_pixels   = 1920,
+
+	.v_sync_polarity   = true,
+	.v_front_porch     = 2,
+	.v_sync_width      = 5,
+	.v_back_porch      = 15,
+	.v_active_lines    = 540,
+
+	.bit_clk_khz       = 744000,
+	.interlaced        = true
+};
+
+// 1080i60 - by the book
+const struct dvi_timing dvi_timing_1920x1080i_60hz = {
+	.h_sync_polarity   = true,
+	.h_front_porch     = 88,
+	.h_sync_width      = 44,
+	.h_back_porch      = 148,
+	.h_active_pixels   = 1920,
+
+	.v_sync_polarity   = true,
+	.v_front_porch     = 2,
+	.v_sync_width      = 5,
+	.v_back_porch      = 15,
+	.v_active_lines    = 540,
+
+	.bit_clk_khz       = 744000,
+	.interlaced        = true
+};
+
+// 1080p30 RB2
 // Strictly speaking RB2 should have a clock speed matching the target frequency more closely
 // but it seems to work!
 const struct dvi_timing dvi_timing_1920x1080p_rb2_30hz = {
@@ -245,6 +281,23 @@ const struct dvi_timing dvi_timing_1920x1080p_rb2_30hz = {
 	.v_active_lines    = 1080,
 
 	.bit_clk_khz       = 660000
+};
+
+// 1080p30 - format 34, by the book
+const struct dvi_timing dvi_timing_1920x1080p_30hz = {
+	.h_sync_polarity   = true,
+	.h_front_porch     = 88,
+	.h_sync_width      = 44,
+	.h_back_porch      = 148,
+	.h_active_pixels   = 1920,
+
+	.v_sync_polarity   = true,
+	.v_front_porch     = 4,
+	.v_sync_width      = 5,
+	.v_back_porch      = 36,
+	.v_active_lines    = 1080,
+
+	.bit_clk_khz       = 744000
 };
 
 // 1080p48 YOLO - may require more than 1.3V, and sorting through your 
