@@ -270,14 +270,14 @@ const struct dvi_timing dvi_timing_2560x1440p_yolo_24hz = {
 	.h_sync_polarity   = true,
 	.h_front_porch     = 8,
 	.h_sync_width      = 32,
-	.h_back_porch      = 24,
+	.h_back_porch      = 40,
 	.h_active_pixels   = 2560,
 
 	.v_sync_polarity   = false,
-	.v_front_porch     = 2,
-	.v_sync_width      = 6,
-	.v_back_porch      = 6,
+	.v_front_porch     = 7,
+	.v_sync_width      = 8,
+	.v_back_porch      = 9,
 	.v_active_lines    = 1440,
 
-	.bit_clk_khz       = 920000
+	.bit_clk_khz       = 928000
 };
