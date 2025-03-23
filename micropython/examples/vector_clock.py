@@ -3,16 +3,19 @@ import time
 import gc
 
 from dvhstx import DVHSTX, PEN_P8, PEN_RGB565
-from picovector import PicoVector, Polygon, RegularPolygon, Rectangle, ANTIALIAS_X4, ANTIALIAS_X16
+from picovector import PicoVector, Polygon, Transform, ANTIALIAS_X16, ANTIALIAS_X4, ANTIALIAS_NONE
 
-display = DVHSTX(PEN_P8, 640, 360)
+display = DVHSTX(PEN_P8, 1920, 1080)
+print("Here")
 
 vector = PicoVector(display)
-vector.set_antialiasing(ANTIALIAS_X4)
+t = Transform()
+vector.set_transform(t)
+vector.set_antialiasing(ANTIALIAS_NONE)
 
-BG = display.create_pen(20, 20, 50)
 RED = display.create_pen(200, 0, 0)
 BLACK = display.create_pen(0, 0, 0)
+DARKGREY = display.create_pen(100, 100, 100)
 GREY = display.create_pen(200, 200, 200)
 WHITE = display.create_pen(255, 255, 255)
 
@@ -25,92 +28,130 @@ WHITE = display.create_pen(14, 60, 76)
 """
 
 WIDTH, HEIGHT = display.get_bounds()
+MIDDLE = (int(WIDTH / 2), int(HEIGHT / 2))
 
-hub = RegularPolygon(int(WIDTH / 2), int(HEIGHT / 2), 24, 5)
+OVERSCAN = 30
+WIDTH -= OVERSCAN
+HEIGHT -= OVERSCAN
 
-face = RegularPolygon(int(WIDTH / 2), int(HEIGHT / 2), 48, int(HEIGHT / 2))
+hub = Polygon()
+hub.circle(MIDDLE[0], MIDDLE[1], 5)
+
+tick_mark = Polygon()
+tick_mark.rectangle(MIDDLE[0] - 3, int(OVERSCAN / 2) + 10, 6, int(HEIGHT / 48))
+
+hour_mark = Polygon()
+hour_mark.rectangle(MIDDLE[0] - 5, int(OVERSCAN / 2) + 10, 10, int(HEIGHT / 10))
+
+minute_hand_length = int(HEIGHT / 2) - int(HEIGHT / 24)
+minute_hand = Polygon()
+minute_hand.path((-5, -minute_hand_length), (-10, int(HEIGHT / 16)), (10, int(HEIGHT / 16)), (5, -minute_hand_length))
+
+hour_hand_length = int(HEIGHT / 2) - int(HEIGHT / 8)
+hour_hand = Polygon()
+hour_hand.path((-5, -hour_hand_length), (-10, int(HEIGHT / 16)), (10, int(HEIGHT / 16)), (5, -hour_hand_length))
+
+second_hand_length = int(HEIGHT / 2) - int(HEIGHT / 8)
+second_hand = Polygon()
+second_hand.path((-2, -second_hand_length), (-2, int(HEIGHT / 8)), (2, int(HEIGHT / 8)), (2, -second_hand_length))
 
 print(time.localtime())
 
 last_second = None
+
+for _ in range(2):
+    display.set_pen(BLACK)
+    display.clear()
+    display.set_pen(WHITE)
+    display.circle(MIDDLE[0], MIDDLE[1], int(HEIGHT / 2) - 4)
+    
+    display.update()
+
 
 while True:
     t_start = time.ticks_ms()
     year, month, day, hour, minute, second, _, _ = time.localtime()
 
     if last_second == second:
+        time.sleep_ms(10)
         continue
 
     last_second = second
 
-    display.set_pen(0)
-    display.clear()
+    t.reset()
 
-    display.set_pen(BLACK)
-    display.circle(int(WIDTH / 2), int(HEIGHT / 2), int(HEIGHT / 2))
     display.set_pen(WHITE)
-    display.circle(int(WIDTH / 2), int(HEIGHT / 2), int(HEIGHT / 2) - 4)
+    display.circle(MIDDLE[0], MIDDLE[1], int(HEIGHT / 2) - 4)
 
     display.set_pen(GREY)
 
     for a in range(60):
-        tick_mark = Rectangle(int(WIDTH / 2) - 3, 10, 6, int(HEIGHT / 48))
-        vector.rotate(tick_mark, 360 / 60.0 * a, int(WIDTH / 2), int(HEIGHT / 2))
-        vector.translate(tick_mark, 0, 2)
+        t.rotate(360 / 60.0 * a, MIDDLE)
+        t.translate(0, 2)
         vector.draw(tick_mark)
+        t.reset()
 
     for a in range(12):
-        hour_mark = Rectangle(int(WIDTH / 2) - 5, 10, 10, int(HEIGHT / 10))
-        vector.rotate(hour_mark, 360 / 12.0 * a, int(WIDTH / 2), int(HEIGHT / 2))
-        vector.translate(hour_mark, 0, 2)
+        t.rotate(360 / 12.0 * a, MIDDLE)
+        t.translate(0, 2)
         vector.draw(hour_mark)
+        t.reset()
 
-    angle_second = second * 6
-    second_hand_length = int(HEIGHT / 2) - int(HEIGHT / 8)
-    second_hand = Polygon((-2, -second_hand_length), (-2, int(HEIGHT / 8)), (2, int(HEIGHT / 8)), (2, -second_hand_length))
-    vector.rotate(second_hand, angle_second, 0, 0)
-    vector.translate(second_hand, int(WIDTH / 2), int(HEIGHT / 2) + 5)
+    display.set_pen(GREY)
+
+    x, y = MIDDLE
+    y += 5
 
     angle_minute = minute * 6
     angle_minute += second / 10.0
-    minute_hand_length = int(HEIGHT / 2) - int(HEIGHT / 24)
-    minute_hand = Polygon((-5, -minute_hand_length), (-10, int(HEIGHT / 16)), (10, int(HEIGHT / 16)), (5, -minute_hand_length))
-    vector.rotate(minute_hand, angle_minute, 0, 0)
-    vector.translate(minute_hand, int(WIDTH / 2), int(HEIGHT / 2) + 5)
+    t.rotate(angle_minute, MIDDLE)
+    t.translate(x, y)
+    vector.draw(minute_hand)
+    t.reset()
 
     angle_hour = (hour % 12) * 30
     angle_hour += minute / 2
-    hour_hand_length = int(HEIGHT / 2) - int(HEIGHT / 8)
-    hour_hand = Polygon((-5, -hour_hand_length), (-10, int(HEIGHT / 16)), (10, int(HEIGHT / 16)), (5, -hour_hand_length))
-    vector.rotate(hour_hand, angle_hour, 0, 0)
-    vector.translate(hour_hand, int(WIDTH / 2), int(HEIGHT / 2) + 5)
-
-    display.set_pen(GREY)
-
-    vector.draw(minute_hand)
+    t.rotate(angle_hour, MIDDLE)
+    t.translate(x, y)
     vector.draw(hour_hand)
+    t.reset()
+
+    angle_second = second * 6
+    t.rotate(angle_second, MIDDLE)
+    t.translate(x, y)
     vector.draw(second_hand)
+    t.reset()
 
     display.set_pen(BLACK)
 
     for a in range(60):
-        tick_mark = Rectangle(int(WIDTH / 2) - 3, 10, 6, int(HEIGHT / 48))
-        vector.rotate(tick_mark, 360 / 60.0 * a, int(WIDTH / 2), int(HEIGHT / 2))
+        t.rotate(360 / 60.0 * a, MIDDLE)
         vector.draw(tick_mark)
+        t.reset()
 
     for a in range(12):
-        hour_mark = Rectangle(int(WIDTH / 2) - 5, 10, 10, int(HEIGHT / 10))
-        vector.rotate(hour_mark, 360 / 12.0 * a, int(WIDTH / 2), int(HEIGHT / 2))
+        t.rotate(360 / 12.0 * a, MIDDLE)
         vector.draw(hour_mark)
+        t.reset()
 
-    vector.translate(minute_hand, 0, -5)
-    vector.translate(hour_hand, 0, -5)
+    x, y = MIDDLE
+
+    t.rotate(angle_minute, MIDDLE)
+    t.translate(x, y)
     vector.draw(minute_hand)
+    t.reset()
+
+    t.rotate(angle_hour, MIDDLE)
+    t.translate(x, y)
     vector.draw(hour_hand)
+    t.reset()
 
     display.set_pen(RED)
-    vector.translate(second_hand, 0, -5)
+    t.rotate(angle_second, MIDDLE)
+    t.translate(x, y)
     vector.draw(second_hand)
+
+    t.reset()
     vector.draw(hub)
 
     display.update()

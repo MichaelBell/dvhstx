@@ -109,4 +109,26 @@ namespace pimoroni {
         color = candidate_cache[cache_key][dither16_pattern[pattern_index]];
         set_pixel(p);
     }
+
+    bool PicoGraphics_PenDVHSTX_P8::render_tile(const Tile *tile) {
+        if (tile->w > blend_buf_size) return false;
+
+        Point p{tile->x, tile->y};
+        for(int y = 0; y < tile->h; y++, p.y++) {
+            uint8_t *palpha = &tile->data[(y * tile->stride)];
+            uint8_t *pdest = blend_buf;
+
+            driver.read_palette_pixel_span(p, (tile->w + 3) & 0xFC, blend_buf);
+            for (int x = 0; x < tile->w; x++) {
+                if (*palpha++) {
+                  *pdest = color;
+                }
+
+                ++pdest;
+            }
+            driver.write_palette_pixel_span(p, tile->w, blend_buf);
+        }
+
+        return true;
+    }
 }

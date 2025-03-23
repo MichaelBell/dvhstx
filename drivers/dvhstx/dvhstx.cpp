@@ -26,9 +26,8 @@ extern "C" {
 using namespace pimoroni;
 
 #ifdef MICROPY_BUILD_TYPE
-#define FRAME_BUFFER_SIZE (640*360)
-__attribute__((section(".uninitialized_data"))) static uint8_t frame_buffer_a[FRAME_BUFFER_SIZE];
-__attribute__((section(".uninitialized_data"))) static uint8_t frame_buffer_b[FRAME_BUFFER_SIZE];
+static APS6404 aps6404_a(0, 2, pio0);
+static APS6404 aps6404_b(6, 8, pio0);
 #endif
 
 #include "font.h"
@@ -816,8 +815,14 @@ void DVHSTX::write_palette_pixel_span(const Point &p, uint l, const uint8_t* dat
 
 void DVHSTX::read_palette_pixel_span(const Point &p, uint l, uint8_t *data)
 {
-    const uint8_t* ptr = point_to_ptr_palette(p);
-    memcpy(data, ptr, l);
+    if (psram_back) {
+        // TODO: This doesn't entirely work.
+        psram_back->read_blocking(point_to_addr8(p), (uint32_t*)data, l >> 2);
+    }
+    else {
+        const uint8_t* ptr = point_to_ptr_palette(p);
+        memcpy(data, ptr, l);
+    }
 }
 
 void DVHSTX::write_text(const Point &p, const char* text, TextColour colour, bool immediate)
@@ -1043,25 +1048,21 @@ bool DVHSTX::init(uint16_t width, uint16_t height, Mode mode_, Pinout pinout, Me
     }
 
     if (layout == MEM_DOUBLE_BUFFER) {
-#ifdef MICROPY_BUILD_TYPE
-        if (frame_width * frame_height * frame_bytes_per_pixel > sizeof(frame_buffer_a)) {
-            panic("Frame buffer too large");
-        }
-
-        frame_buffer_display = frame_buffer_a;
-        frame_buffer_back = frame_buffer_b;
-#else
         frame_buffer_display = (uint8_t*)malloc(frame_width * frame_height * frame_bytes_per_pixel);
         frame_buffer_back = (uint8_t*)malloc(frame_width * frame_height * frame_bytes_per_pixel);
-#endif
         memset(frame_buffer_display, 0, frame_width * frame_height * frame_bytes_per_pixel);
         memset(frame_buffer_back, 0, frame_width * frame_height * frame_bytes_per_pixel);
     }
     else if (layout == MEM_DOUBLE_APS6404 || layout == MEM_COMBINED_APS6404) {
         // TODO, these should share a PIO - and clock speed is fixed so can simplify
+#ifdef MICROPY_BUILD_TYPE
+        psram_display = &aps6404_a;
+        psram_back = &aps6404_b;
+#else
         psram_display = new APS6404(0, 2, pio0);
-        psram_display->init();
         psram_back = new APS6404(6, 8, pio1);
+#endif
+        psram_display->init();
         psram_back->init();
     } else if (layout == MEM_SINGLE_APS6408) {
         psram8 = new APS6408(8, 0, 10, 11);
@@ -1323,6 +1324,7 @@ void DVHSTX::reset() {
         font_cache = nullptr;
     }
     free(line_buffers);
+    line_buffers = nullptr;
 
 #ifndef MICROPY_BUILD_TYPE
     free(frame_buffer_display);

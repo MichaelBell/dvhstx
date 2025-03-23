@@ -81,8 +81,14 @@ namespace pimoroni {
       void get_dither_candidates(const RGB &col, const RGB *palette, size_t len, std::array<uint8_t, 16> &candidates);
       void set_pixel_dither(const Point &p, const RGB &c) override;
 
+      bool render_tile(const Tile *tile) override;
+
       static size_t buffer_size(uint w, uint h) {
           return w * h;
       }
+
+    private:
+      static constexpr int blend_buf_size = 128;
+      uint8_t blend_buf[blend_buf_size] alignas(4);
   };  
 }

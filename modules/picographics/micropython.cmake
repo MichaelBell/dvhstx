@@ -10,20 +10,30 @@ target_sources(usermod_${MOD_NAME} INTERFACE
     ${PICOVISION_PATH}/drivers/dvhstx/dvhstx.cpp
     ${PICOVISION_PATH}/drivers/dvhstx/dvi.cpp
     ${PICOVISION_PATH}/drivers/dvhstx/intel_one_mono_2bpp.c
+    ${PICOVISION_PATH}/drivers/aps6404/aps6404.cpp
+    ${PICOVISION_PATH}/drivers/aps6404/aps6404_perf_critical.cpp
+    ${PICOVISION_PATH}/drivers/aps6408/aps6408.cpp
     ${PIMORONI_PICO_PATH}/libraries/pico_graphics/pico_graphics.cpp
     ${PICOVISION_PATH}/libraries/pico_graphics/pico_graphics_pen_dvhstx_rgb565.cpp
     ${PICOVISION_PATH}/libraries/pico_graphics/pico_graphics_pen_dvhstx_p8.cpp
     ${PIMORONI_PICO_PATH}/libraries/pico_graphics/types.cpp
 )
 
+pico_generate_pio_header(usermod_${MOD_NAME} ${PICOVISION_PATH}/drivers/aps6404/aps6404.pio)
+pico_generate_pio_header(usermod_${MOD_NAME} ${PICOVISION_PATH}/drivers/aps6408/aps6408.pio)
+
 # MicroPython compiles with -Os by default, these functions are critical path enough that -O2 is worth it (note -O3 is slower in this case)
 set_source_files_properties(${PICOVISION_PATH}/drivers/dvhstx/dvhstx.cpp PROPERTIES COMPILE_OPTIONS "-O2")
+set_source_files_properties(${PICOVISION_PATH}/drivers/aps6404/aps6404_perf_critical.cpp PROPERTIES COMPILE_OPTIONS "-O2")
+set_source_files_properties(${PICOVISION_PATH}/drivers/aps6408/aps6408.cpp PROPERTIES COMPILE_OPTIONS "-O2")
 
 
 target_include_directories(usermod_${MOD_NAME} INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}
     ${PICOVISION_PATH}
     ${PICOVISION_PATH}/drivers/dvhstx
+    ${PICOVISION_PATH}/drivers/aps6404
+    ${PICOVISION_PATH}/drivers/aps6408
     ${PICOVISION_PATH}/libraries/pico_graphics     # for pico_graphics_dv.hpp
     ${PIMORONI_PICO_PATH}/libraries/pico_graphics  # for pico_graphics.hpp
 #    ${PIMORONI_PICO_PATH}/libraries/pngdec

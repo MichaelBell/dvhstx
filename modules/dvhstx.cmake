@@ -10,7 +10,7 @@ list(APPEND CMAKE_MODULE_PATH "${PIMORONI_PICO_PATH}/micropython")
 list(APPEND CMAKE_MODULE_PATH "${PIMORONI_PICO_PATH}/micropython/modules")
 
 # Allows us to find /pga/modules/c/<module>/micropython
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
+#list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
@@ -36,9 +36,13 @@ include(micropython-common-breakouts)
 # Utility
 include(adcfft/micropython)
 
-# Note: cppmem is *required* for C++ code to function on MicroPython
-# it redirects `malloc` and `free` calls to MicroPython's heap
-include(cppmem/micropython)
-
 # version.py, pimoroni.py and boot.py
 include(modules_py/modules_py)
+
+# C++ Magic Memory
+include(cppmem/micropython)
+target_compile_definitions(usermod INTERFACE
+    CPP_FIXED_HEAP_SIZE=256)
+
+# Disable build-busting C++ exceptions
+include(micropython-disable-exceptions)

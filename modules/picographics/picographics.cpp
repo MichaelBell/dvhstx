@@ -93,11 +93,11 @@ mp_obj_t ModPicoGraphics_make_new(const mp_obj_type_t *type, size_t n_args, size
             break;
         case PEN_RGB565:
             self->graphics = m_new_class(PicoGraphics_PenDVHSTX_RGB565, width, height, dv_display);
-            status = dv_display.init(width, height, DVHSTX::MODE_RGB565);
+            status = dv_display.init(width, height, DVHSTX::MODE_RGB565, {13, 15, 17, 19}, DVHSTX::MEM_DOUBLE_APS6404);
             break;
         case PEN_P8:
             self->graphics = m_new_class(PicoGraphics_PenDVHSTX_P8, width, height, dv_display);
-            status = dv_display.init(width, height, DVHSTX::MODE_PALETTE);
+            status = dv_display.init(width, height, DVHSTX::MODE_PALETTE, {13, 15, 17, 19}, DVHSTX::MEM_DOUBLE_APS6404);
             break;
         default:
             break;
